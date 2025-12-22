@@ -1,0 +1,22 @@
+# Performance Comparison Summary
+
+Query 1: Simple Term Search
+  Paradedb: 0.0056s (179.69 TPS)
+  Elasticsearch: 0.0103s (97.45 TPS)
+
+Query 2: Phrase Search
+  Paradedb: 0.0057s (174.22 TPS)
+  Elasticsearch: 0.0059s (168.66 TPS)
+
+Query 3: Complex Query
+  Paradedb: 0.0069s (144.51 TPS)
+  Elasticsearch: 0.0068s (147.49 TPS)
+
+Total Test Duration:
+  Paradedb: 1.8225s
+  Elasticsearch: 2.2971s
+
+TPS Summary (Average across queries):
+  Paradedb: 166.14 TPS
+  Elasticsearch: 137.87 TPS
+

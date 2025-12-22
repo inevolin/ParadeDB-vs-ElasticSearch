@@ -1,0 +1,2 @@
+Average time for Query 3: 0.004149s
+Total time for Query 3: 0.414912s

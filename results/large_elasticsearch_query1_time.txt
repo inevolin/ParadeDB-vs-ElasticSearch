@@ -1,0 +1,2 @@
+Average time for Query 1: 0.006497s
+Total time for Query 1: 0.649702s

@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: paradedb-config
+  
+data:
+  POSTGRES_DB: benchmark_db
+  POSTGRES_USER: benchmark_user
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: paradedb-secret
+  
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: benchmark_password_123
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: paradedb-pvc
+  
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: paradedb
+  
+  labels:
+    app: paradedb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: paradedb
+  template:
+    metadata:
+      labels:
+        app: paradedb
+    spec:
+      containers:
+      - name: paradedb
+        image: paradedb/paradedb:latest
+        ports:
+        - containerPort: 5432
+          name: postgres
+        env:
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: paradedb-config
+              key: POSTGRES_DB
+        - name: POSTGRES_USER
+          valueFrom:
+            configMapKeyRef:
+              name: paradedb-config
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: paradedb-secret
+              key: POSTGRES_PASSWORD
+        volumeMounts:
+        - name: paradedb-storage
+          mountPath: /var/lib/postgresql/data
+        - name: benchmark-data
+          mountPath: /data
+          readOnly: true
+        - name: benchmark-scripts
+          mountPath: /scripts
+        - name: benchmark-config
+          mountPath: /config
+          readOnly: true
+        resources:
+          requests:
+            memory: "8Gi"
+            cpu: "4"
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - benchmark_user
+            - -d
+            - postgres
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - benchmark_user
+            - -d
+            - postgres
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: paradedb-storage
+        persistentVolumeClaim:
+          claimName: paradedb-pvc
+      - name: benchmark-data
+        hostPath:
+          path: /Users/ilya/DocumentsNoSync/ParadeDB-ElasticSearch-Benchmarks/data
+          type: Directory
+      - name: benchmark-scripts
+        hostPath:
+          path: /Users/ilya/DocumentsNoSync/ParadeDB-ElasticSearch-Benchmarks/scripts
+          type: Directory
+      - name: benchmark-config
+        hostPath:
+          path: /Users/ilya/DocumentsNoSync/ParadeDB-ElasticSearch-Benchmarks/config
+          type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: paradedb-service
+  
+  labels:
+    app: paradedb
+spec:
+  type: ClusterIP
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+  selector:
+    app: paradedb

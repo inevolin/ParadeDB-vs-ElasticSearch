@@ -1,0 +1,39 @@
+{
+  "paradedb": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "benchmark_db",
+    "user": "benchmark_user",
+    "password": "benchmark_password_123"
+  },
+  "elasticsearch": {
+    "host": "localhost",
+    "port": 9200,
+    "scheme": "http",
+    "index_name": "documents"
+  },
+  "benchmark": {
+    "concurrency": 4,
+    "transactions": 100
+  },
+  "data": {
+    "small_scale":  1000,
+    "medium_scale": 100000,
+    "large_scale":  1000000
+  },
+  "resources": {
+    "paradedb": {
+      "cpu_request": "4",
+      "cpu_limit": "4",
+      "memory_request": "8Gi",
+      "memory_limit": "8Gi"
+    },
+    "elasticsearch": {
+      "cpu_request": "4",
+      "cpu_limit": "4",
+      "memory_request": "8Gi",
+      "memory_limit": "8Gi",
+      "jvm_opts": "-Xms4g -Xmx4g"
+    }
+  }
+}

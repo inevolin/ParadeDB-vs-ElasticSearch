@@ -6,6 +6,8 @@ Generates performance comparison plots from benchmark results
 
 import os
 import sys
+import json
+import csv
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
@@ -85,9 +87,12 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
 
     # Collect all times for totals
     total_times = {db: 0.0 for db in databases}
+    total_query_times = {db: 0.0 for db in databases}
     startup_times = {db: None for db in databases}
     data_loading_times = {db: None for db in databases}
     index_creation_times = {db: None for db in databases}
+    index_sizes = {db: None for db in databases}
+    resource_usage = {db: {'cpu': [], 'memory': [], 'timestamps': []} for db in databases}
     query_times = {query: {db: None for db in databases} for query in queries}
     query_tps = {query: {db: None for db in databases} for query in queries}
 
@@ -96,29 +101,112 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
         startup_file = os.path.join(results_dir, f'{scale}_{db}_startup_time.txt')
         startup_times[db] = parse_startup_file(startup_file)
 
-    # Collect data loading times
+    # Collect metrics from JSON or fallback to text files
     for db in databases:
-        data_loading_file = os.path.join(results_dir, f'{scale}_{db}_data_loading_time.txt')
-        data_loading_times[db] = parse_data_loading_file(data_loading_file)
+        json_file = os.path.join(results_dir, f'{scale}_{db}_results.json')
+        if os.path.exists(json_file):
+            try:
+                with open(json_file, 'r') as f:
+                    data = json.load(f)
+                    metrics = data.get('metrics', {})
+                    
+                    data_loading_times[db] = metrics.get('data_loading_time')
+                    index_creation_times[db] = metrics.get('index_creation_time')
+                    index_sizes[db] = metrics.get('database_size_bytes')
+                    
+                    for i, query in enumerate(queries):
+                        q_key = f'query_{i+1}'
+                        if q_key in metrics:
+                            query_times[query][db] = metrics[q_key].get('average_latency')
+                            query_tps[query][db] = metrics[q_key].get('tps')
+                            if metrics[q_key].get('total_time'):
+                                total_times[db] += metrics[q_key].get('total_time')
+                                total_query_times[db] += metrics[q_key].get('total_time')
+            except Exception as e:
+                print(f"Error parsing JSON for {db}: {e}")
+        
+        # Collect resource usage
+        resource_file = os.path.join(results_dir, f'{scale}_{db}_resources.csv')
+        if os.path.exists(resource_file):
+            try:
+                with open(resource_file, 'r') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        try:
+                            ts = float(row['Timestamp'])
+                            # Parse CPU (e.g., "100m" -> 0.1, "2" -> 2.0, "0.50%" -> 0.005)
+                            cpu_str = row['CPU']
+                            if cpu_str.endswith('m'):
+                                cpu = float(cpu_str[:-1]) / 1000.0
+                            elif cpu_str.endswith('%'):
+                                # Docker stats format: 100% = 1 core
+                                cpu = float(cpu_str[:-1]) / 100.0
+                            else:
+                                cpu = float(cpu_str)
+                            
+                            # Parse Memory (e.g., "500Mi" -> 500, "1Gi" -> 1024, "10MiB" -> 10)
+                            mem_str = row['Memory']
+                            if mem_str.endswith('Gi'):
+                                mem = float(mem_str[:-2]) * 1024
+                            elif mem_str.endswith('GiB'):
+                                mem = float(mem_str[:-3]) * 1024
+                            elif mem_str.endswith('Mi'):
+                                mem = float(mem_str[:-2])
+                            elif mem_str.endswith('MiB'):
+                                mem = float(mem_str[:-3])
+                            elif mem_str.endswith('Ki'):
+                                mem = float(mem_str[:-2]) / 1024
+                            elif mem_str.endswith('KiB'):
+                                mem = float(mem_str[:-3]) / 1024
+                            else:
+                                mem = float(mem_str) # Assume bytes or raw number, treat as MiB? Or just raw.
+                                # Actually kubectl top usually returns Mi or Gi.
+                                # If it's just a number, it might be bytes, but let's assume MiB if unsure or handle carefully.
+                                # For now, let's assume standard kubectl output.
+                            
+                            resource_usage[db]['timestamps'].append(ts)
+                            resource_usage[db]['cpu'].append(cpu)
+                            resource_usage[db]['memory'].append(mem)
+                        except ValueError:
+                            continue
+                    
+                    # Normalize timestamps to start from 0
+                    if resource_usage[db]['timestamps']:
+                        start_ts = resource_usage[db]['timestamps'][0]
+                        resource_usage[db]['timestamps'] = [t - start_ts for t in resource_usage[db]['timestamps']]
+            except Exception as e:
+                print(f"Error parsing resources for {db}: {e}")
 
-    # Collect index creation times (only for paradedb)
-    for db in databases:
-        if db == 'paradedb':
+        # Fallback if data missing
+        if data_loading_times[db] is None:
+            data_loading_file = os.path.join(results_dir, f'{scale}_{db}_data_loading_time.txt')
+            data_loading_times[db] = parse_data_loading_file(data_loading_file)
+            
+        if index_creation_times[db] is None:
             index_creation_file = os.path.join(results_dir, f'{scale}_{db}_index_creation_time.txt')
             index_creation_times[db] = parse_index_creation_file(index_creation_file)
+            
+        for i, query in enumerate(queries):
+            if query_times[query][db] is None:
+                time_file = os.path.join(results_dir, f'{scale}_{db}_{query}_time.txt')
+                times = parse_time_file(time_file)
+                if times:
+                    query_times[query][db] = times['average']
+                    if times['total'] is not None:
+                        total_query_times[db] += times['total']
+                        total_times[db] += times['total']
+                    # Estimate TPS if not available
+                    if times['average'] > 0:
+                        query_tps[query][db] = 1.0 / times['average']
 
-    for query in queries:
-        for db in databases:
-            time_file = os.path.join(results_dir, f'{scale}_{db}_{query}_time.txt')
-            times = parse_time_file(time_file)
-            if times:
-                avg_time = times['average']
-                query_times[query][db] = avg_time
-                # Calculate TPS (Transactions Per Second) = 1 / average_time
-                if avg_time > 0:
-                    query_tps[query][db] = 1.0 / avg_time
-                if times['total'] is not None:
-                    total_times[db] += times['total']
+    # Calculate total times (excluding queries as they are already added if available)
+    for db in databases:
+        if startup_times[db] is not None:
+            total_times[db] += startup_times[db]
+        if data_loading_times[db] is not None:
+            total_times[db] += data_loading_times[db]
+        if index_creation_times[db] is not None:
+            total_times[db] += index_creation_times[db]
 
     # Create figure with subplots (3x3: startup + data loading/indexing + total query + query times + TPS)
     fig, axes = plt.subplots(3, 3, figsize=(20, 12))
@@ -211,9 +299,9 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
     db_names = []
     totals = []
     for db in databases:
-        if total_times[db] > 0:
+        if total_query_times[db] > 0:
             db_names.append(db.title())
-            totals.append(total_times[db])
+            totals.append(total_query_times[db])
 
     if totals:
         bars = ax.bar(range(len(db_names)), totals, color=colors[:len(db_names)], alpha=0.7)
@@ -322,11 +410,11 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
                 fontsize=12, color='gray')
 
     plt.tight_layout()
-    agg_plot_file = os.path.join(plots_dir, f'{scale}_aggregated_performance_time.png' if scale else 'aggregated_performance_time.png')
-    plt.savefig(agg_plot_file, dpi=300, bbox_inches='tight')
+    # agg_plot_file = os.path.join(plots_dir, f'{scale}_aggregated_performance_time.png' if scale else 'aggregated_performance_time.png')
+    # plt.savefig(agg_plot_file, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f"Aggregated time performance plot saved to: {agg_plot_file}")
+    # print(f"Aggregated time performance plot saved to: {agg_plot_file}")
 
     # Generate aggregated plot (all queries in one chart) - TPS
     fig3, ax3 = plt.subplots(figsize=(10, 6))
@@ -366,11 +454,185 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
                 fontsize=12, color='gray')
 
     plt.tight_layout()
-    agg_tps_plot_file = os.path.join(plots_dir, f'{scale}_aggregated_performance_tps.png' if scale else 'aggregated_performance_tps.png')
-    plt.savefig(agg_tps_plot_file, dpi=300, bbox_inches='tight')
+    # agg_tps_plot_file = os.path.join(plots_dir, f'{scale}_aggregated_performance_tps.png' if scale else 'aggregated_performance_tps.png')
+    # plt.savefig(agg_tps_plot_file, dpi=300, bbox_inches='tight')
     plt.close()
 
-    print(f"Aggregated TPS performance plot saved to: {agg_tps_plot_file}")
+    # print(f"Aggregated TPS performance plot saved to: {agg_tps_plot_file}")
+
+    # Generate Database Size Plot
+    fig4, ax4 = plt.subplots(figsize=(10, 6))
+    fig4.suptitle('Database Size Comparison', fontsize=16, fontweight='bold')
+    
+    db_names = []
+    sizes_mb = []
+    for db in databases:
+        if index_sizes[db] is not None:
+            db_names.append(db.title())
+            sizes_mb.append(index_sizes[db] / (1024 * 1024)) # Convert to MB
+
+    if sizes_mb:
+        bars = ax4.bar(range(len(db_names)), sizes_mb, color=colors[:len(db_names)], alpha=0.7)
+        ax4.set_ylabel('Size (MB)')
+        ax4.set_xticks(range(len(db_names)))
+        ax4.set_xticklabels(db_names)
+        for bar, size in zip(bars, sizes_mb):
+            ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(sizes_mb)*0.02, 
+                   f'{size:.2f} MB', ha='center', va='bottom', fontsize=10)
+    else:
+        ax4.text(0.5, 0.5, 'No database size data available',
+                transform=ax4.transAxes, ha='center', va='center',
+                fontsize=12, color='gray')
+    
+    plt.tight_layout()
+    size_plot_file = os.path.join(plots_dir, f'{scale}_database_size_comparison.png' if scale else 'database_size_comparison.png')
+    plt.savefig(size_plot_file, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"Database size plot saved to: {size_plot_file}")
+
+    # Generate Resource Usage Plots (CPU & Memory)
+    if any(len(resource_usage[db]['timestamps']) > 0 for db in databases):
+        fig5, (ax5_cpu, ax5_mem) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+        fig5.suptitle('Resource Usage Over Time', fontsize=16, fontweight='bold')
+        
+        for i, db in enumerate(databases):
+            if resource_usage[db]['timestamps']:
+                ax5_cpu.plot(resource_usage[db]['timestamps'], resource_usage[db]['cpu'], 
+                           label=db.title(), color=colors[i], linewidth=2)
+                ax5_mem.plot(resource_usage[db]['timestamps'], resource_usage[db]['memory'], 
+                           label=db.title(), color=colors[i], linewidth=2)
+        
+        ax5_cpu.set_ylabel('CPU Usage (Cores)')
+        ax5_cpu.set_title('CPU Usage')
+        ax5_cpu.legend()
+        ax5_cpu.grid(True, alpha=0.3)
+        
+        ax5_mem.set_ylabel('Memory Usage (MiB)')
+        ax5_mem.set_title('Memory Usage')
+        ax5_mem.set_xlabel('Time (seconds)')
+        ax5_mem.legend()
+        ax5_mem.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        # resource_plot_file = os.path.join(plots_dir, f'{scale}_resource_usage.png' if scale else 'resource_usage.png')
+        # plt.savefig(resource_plot_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        # print(f"Resource usage plot saved to: {resource_plot_file}")
+
+    # Generate Combined Summary Plot (2x2)
+    fig_combined, axes_combined = plt.subplots(2, 2, figsize=(24, 18))
+    fig_combined.suptitle(f'ParadeDB vs Elasticsearch Benchmark Summary ({scale})', fontsize=20, fontweight='bold')
+    
+    # 1. Aggregated Time (Top-Left)
+    ax_c1 = axes_combined[0, 0]
+    x = np.arange(len(queries))
+    width = 0.35
+    
+    db_time_data = []
+    for db in databases:
+        times = [query_times[q][db] for q in queries]
+        db_time_data.append(times)
+
+    if any(any(t is not None for t in times) for times in db_time_data):
+        for i, db in enumerate(databases):
+            times = [query_times[q][db] for q in queries]
+            valid_times = [t for t in times if t is not None]
+            if valid_times:
+                ax_c1.bar(x + i*width, times, width, label=db.title(), color=colors[i], alpha=0.7)
+        
+        ax_c1.set_xlabel('Query Type')
+        ax_c1.set_ylabel('Time (seconds)')
+        ax_c1.set_title('Query Performance (Time)', fontweight='bold')
+        ax_c1.set_xticks(x + width/2)
+        ax_c1.set_xticklabels(query_labels)
+        ax_c1.legend()
+        ax_c1.grid(True, alpha=0.3, axis='y')
+        ax_c1.set_ylim(bottom=0)
+    else:
+        ax_c1.text(0.5, 0.5, 'No data available', transform=ax_c1.transAxes, ha='center', va='center')
+
+    # 2. Aggregated TPS (Top-Right)
+    ax_c2 = axes_combined[0, 1]
+    db_tps_data_combined = []
+    for db in databases:
+        tps_values = [query_tps[q][db] for q in queries]
+        db_tps_data_combined.append(tps_values)
+
+    if any(any(t is not None for t in tps_values) for tps_values in db_tps_data_combined):
+        for i, db in enumerate(databases):
+            tps_values = [query_tps[q][db] for q in queries]
+            valid_tps = [t for t in tps_values if t is not None]
+            if valid_tps:
+                ax_c2.bar(x + i*width, tps_values, width, label=db.title(), color=colors[i], alpha=0.7)
+        
+        ax_c2.set_xlabel('Query Type')
+        ax_c2.set_ylabel('TPS')
+        ax_c2.set_title('Query Performance (TPS)', fontweight='bold')
+        ax_c2.set_xticks(x + width/2)
+        ax_c2.set_xticklabels(query_labels)
+        ax_c2.legend()
+        ax_c2.grid(True, alpha=0.3, axis='y')
+        ax_c2.set_ylim(bottom=0)
+    else:
+        ax_c2.text(0.5, 0.5, 'No data available', transform=ax_c2.transAxes, ha='center', va='center')
+
+    # 3. Database Size (Bottom-Left)
+    ax_c3 = axes_combined[1, 0]
+    db_names_size = []
+    sizes_mb_combined = []
+    for db in databases:
+        if index_sizes[db] is not None:
+            db_names_size.append(db.title())
+            sizes_mb_combined.append(index_sizes[db] / (1024 * 1024))
+
+    if sizes_mb_combined:
+        bars = ax_c3.bar(range(len(db_names_size)), sizes_mb_combined, color=colors[:len(db_names_size)], alpha=0.7)
+        ax_c3.set_ylabel('Size (MB)')
+        ax_c3.set_title('Database Size Comparison', fontweight='bold')
+        ax_c3.set_xticks(range(len(db_names_size)))
+        ax_c3.set_xticklabels(db_names_size)
+        for bar, size in zip(bars, sizes_mb_combined):
+            ax_c3.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{size:.2f} MB', 
+                      ha='center', va='bottom', fontsize=10)
+    else:
+        ax_c3.text(0.5, 0.5, 'No data available', transform=ax_c3.transAxes, ha='center', va='center')
+
+    # 4. Resource Usage (Bottom-Right) - Dual Axis
+    ax_c4 = axes_combined[1, 1]
+    ax_c4_mem = ax_c4.twinx()
+    
+    has_resource_data = False
+    for i, db in enumerate(databases):
+        if resource_usage[db]['timestamps']:
+            has_resource_data = True
+            # CPU on Left Axis (Solid)
+            ax_c4.plot(resource_usage[db]['timestamps'], resource_usage[db]['cpu'], 
+                      label=f"{db.title()} CPU", color=colors[i], linewidth=2, linestyle='-')
+            # Memory on Right Axis (Dashed)
+            ax_c4_mem.plot(resource_usage[db]['timestamps'], resource_usage[db]['memory'], 
+                          label=f"{db.title()} Mem", color=colors[i], linewidth=2, linestyle='--')
+    
+    if has_resource_data:
+        ax_c4.set_xlabel('Time (s)')
+        ax_c4.set_ylabel('CPU (Cores)')
+        ax_c4_mem.set_ylabel('Memory (MiB)')
+        ax_c4.set_title('Resource Usage (CPU & Memory)', fontweight='bold')
+        
+        # Combine legends
+        lines1, labels1 = ax_c4.get_legend_handles_labels()
+        lines2, labels2 = ax_c4_mem.get_legend_handles_labels()
+        ax_c4.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+        
+        ax_c4.grid(True, alpha=0.3)
+    else:
+        ax_c4.text(0.5, 0.5, 'No data available', transform=ax_c4.transAxes, ha='center', va='center')
+        ax_c4_mem.axis('off')
+
+    plt.tight_layout()
+    combined_plot_file = os.path.join(plots_dir, f'{scale}_combined_summary.png' if scale else 'combined_summary.png')
+    plt.savefig(combined_plot_file, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"Combined summary plot saved to: {combined_plot_file}")
 
     # Generate summary text file
     summary_file = os.path.join(plots_dir, f'{scale}_performance_summary.txt' if scale else 'performance_summary.txt')
@@ -399,6 +661,26 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
                 f.write(f"  {db.title()}: N/A\n")
 
         f.write("\n")
+        
+        # Add Database Sizes
+        f.write("Database Sizes:\n")
+        for db in databases:
+            if index_sizes[db] is not None:
+                f.write(f"  {db.title()}: {index_sizes[db] / (1024*1024):.2f} MB\n")
+            else:
+                f.write(f"  {db.title()}: N/A\n")
+        f.write("\n")
+        
+        # Add Resource Usage Summary (Peak)
+        f.write("Peak Resource Usage:\n")
+        for db in databases:
+            if resource_usage[db]['cpu']:
+                peak_cpu = max(resource_usage[db]['cpu'])
+                peak_mem = max(resource_usage[db]['memory'])
+                f.write(f"  {db.title()}: {peak_cpu:.2f} Cores, {peak_mem:.2f} MiB\n")
+            else:
+                f.write(f"  {db.title()}: N/A\n")
+        f.write("\n")
 
         for i, (query, label) in enumerate(zip(queries, query_labels)):
             f.write(f"Query {i+1}: {label}\n")
@@ -416,8 +698,18 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
 
             f.write("\n")
 
+        # Add total query durations
+        f.write("Total Query Duration:\n")
+        for db in databases:
+            if total_query_times[db] > 0:
+                f.write(f"  {db.title()}: {total_query_times[db]:.4f}s\n")
+            else:
+                f.write(f"  {db.title()}: N/A\n")
+
+        f.write("\n")
+
         # Add total durations
-        f.write("Total Test Duration:\n")
+        f.write("Total Workflow Duration (Setup + Ingest + Query):\n")
         for db in databases:
             if total_times[db] > 0:
                 f.write(f"  {db.title()}: {total_times[db]:.4f}s\n")

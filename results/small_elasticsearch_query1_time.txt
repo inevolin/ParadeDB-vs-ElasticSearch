@@ -1,2 +1,0 @@
-Average Latency for Query 1: 0.004306s
-Wall time for Query 1: 0.112888s

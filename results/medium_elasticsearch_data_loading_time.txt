@@ -1,1 +1,0 @@
-Data loading time: 66.884803s

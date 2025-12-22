@@ -1,0 +1,24 @@
+{
+  "database": "paradedb",
+  "scale": "large",
+  "metrics": {
+    "data_loading_time": 24.224348,
+    "index_creation_time": 52.906704,
+    "database_size_bytes": 2064813203,
+    "query_1": {
+      "average_latency": 0.0068730245901679156,
+      "total_time": 0.10666154199861921,
+      "tps": 937.5450431918052
+    },
+    "query_2": {
+      "average_latency": 0.0072624525502033065,
+      "total_time": 0.11975845899723936,
+      "tps": 835.0140844940663
+    },
+    "query_3": {
+      "average_latency": 0.011400435011018999,
+      "total_time": 0.1687213750119554,
+      "tps": 592.6931308668752
+    }
+  }
+}

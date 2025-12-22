@@ -13,13 +13,25 @@
     "index_name": "documents"
   },
   "benchmark": {
-    "concurrency": 4,
+    "concurrency": 100,
     "transactions": 100
   },
   "data": {
     "small_scale":  1000,
     "medium_scale": 100000,
     "large_scale":  1000000
+  },
+  "queries": {
+    "simple": {
+      "terms": ["artichokes", "ganofs", "gasses", "incurrent", "demonizes", "sipage", "whaleback", "metasomasis"]
+    },
+    "phrase": {
+      "terms": ["artichokes demonizes", "ganofs sipage", "gasses whaleback", "incurrent metasomasis"]
+    },
+    "complex": {
+      "term1s": ["artichokes", "ganofs", "gasses", "incurrent", "demonizes", "sipage", "whaleback", "metasomasis"],
+      "term2s": ["restir", "skinker", "tribesmanship", "enscene", "slakiest", "caldron", "forerake", "penthouses"]
+    }
   },
   "resources": {
     "paradedb": {

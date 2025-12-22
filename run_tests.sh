@@ -144,6 +144,35 @@ update_k8s_resources() {
     DATA_PATH="$(pwd)/$DATA_DIR"
     SCRIPT_PATH="$(pwd)/scripts"
     CONFIG_PATH="$(pwd)/config"
+    RESULTS_PATH="$(pwd)/$RESULTS_DIR"
+
+    # Verify directories exist
+    if [[ ! -d "$DATA_PATH" ]]; then
+        print_error "Data directory not found: $DATA_PATH"
+        exit 1
+    fi
+    if [[ ! -d "$SCRIPT_PATH" ]]; then
+        print_error "Scripts directory not found: $SCRIPT_PATH"
+        exit 1
+    fi
+    if [[ ! -d "$CONFIG_PATH" ]]; then
+        print_error "Config directory not found: $CONFIG_PATH"
+        exit 1
+    fi
+    
+    # Ensure results directory exists
+    if [[ ! -d "$RESULTS_PATH" ]]; then
+        print_info "Creating results directory: $RESULTS_PATH"
+        mkdir -p "$RESULTS_PATH"
+    fi
+
+    # Update benchmark-runner deployment with correct paths
+    # We use a broad regex to match any path ending in the expected directory name
+    # This ensures portability across different environments
+    sed -i '' "s|path: .*/data$|path: $DATA_PATH|g" k8s/benchmark-runner-deployment.yaml
+    sed -i '' "s|path: .*/scripts$|path: $SCRIPT_PATH|g" k8s/benchmark-runner-deployment.yaml
+    sed -i '' "s|path: .*/config$|path: $CONFIG_PATH|g" k8s/benchmark-runner-deployment.yaml
+    sed -i '' "s|path: .*/results$|path: $RESULTS_PATH|g" k8s/benchmark-runner-deployment.yaml
 
     # Replace path placeholders in both deployments
     sed -i '' "s|DATA_PATH_PLACEHOLDER|$DATA_PATH|g" k8s/paradedb-deployment.yaml
@@ -245,16 +274,16 @@ setup_database() {
         # Deploy benchmark runner first
         print_info "Deploying benchmark runner..."
         kubectl apply -f k8s/benchmark-runner-deployment.yaml
-        kubectl wait --for=condition=ready pod -l app=benchmark-runner --timeout=300s
+        kubectl rollout status deployment/benchmark-runner --timeout=300s
 
         if [[ "$db" == "paradedb" ]]; then
             print_info "Deploying ParadeDB..."
             kubectl apply -f k8s/paradedb-deployment.yaml
-            kubectl wait --for=condition=ready pod -l app=paradedb --timeout=300s
+            kubectl rollout status deployment/paradedb --timeout=300s
         elif [[ "$db" == "elasticsearch" ]]; then
             print_info "Deploying Elasticsearch..."
             kubectl apply -f k8s/elasticsearch-deployment.yaml
-            kubectl wait --for=condition=ready pod -l app=elasticsearch --timeout=300s
+            kubectl rollout status deployment/elasticsearch --timeout=300s
         fi
 
         # Record deployment end time and calculate startup time
@@ -286,27 +315,37 @@ run_benchmark() {
     fi
 
     if command -v kubectl &> /dev/null; then
+        # Start resource monitoring
+        local monitor_pid
+        local db_pod_label="app=$db"
+        print_info "Starting resource monitoring for $db..."
+        
+        python3 scripts/monitor_resources.py --label "$db_pod_label" --output "$RESULTS_DIR/${SCALE}_${db}_resources.csv" --interval 0.5 &
+        monitor_pid=$!
+        disown $monitor_pid
+
+        # Give monitoring script time to initialize
+        sleep 5
+
         # Get benchmark runner pod
         local runner_pod=$(kubectl get pods -l app=benchmark-runner --field-selector=status.phase=Running -o name --sort-by=.metadata.creationTimestamp | tail -1 | cut -d/ -f2)
         
+        # set --quiet flag to reduce output here if needed
         if [[ "$db" == "paradedb" ]]; then
-            # Run the Python benchmark script which handles everything
-            kubectl exec $runner_pod -- env DB_HOST=paradedb-service DB_PORT=5432 POSTGRES_DB=benchmark_db POSTGRES_USER=benchmark_user POSTGRES_PASSWORD=benchmark_password_123 SCALE=$SCALE python3 /scripts/benchmark_paradedb.py --transactions $TRANSACTIONS --concurrency $CONCURRENCY --quiet
-            # Copy results back
-            kubectl cp $runner_pod:/tmp/data_loading_time.txt "$RESULTS_DIR/${SCALE}_${db}_data_loading_time.txt" || true
-            kubectl cp $runner_pod:/tmp/index_creation_time.txt "$RESULTS_DIR/${SCALE}_${db}_index_creation_time.txt" || true
-            kubectl cp $runner_pod:/tmp/query1_time.txt "$RESULTS_DIR/${SCALE}_${db}_query1_time.txt" || true
-            kubectl cp $runner_pod:/tmp/query2_time.txt "$RESULTS_DIR/${SCALE}_${db}_query2_time.txt" || true
-            kubectl cp $runner_pod:/tmp/query3_time.txt "$RESULTS_DIR/${SCALE}_${db}_query3_time.txt" || true
+            kubectl exec $runner_pod -- env DB_HOST=paradedb-service DB_PORT=5432 POSTGRES_DB=benchmark_db POSTGRES_USER=benchmark_user POSTGRES_PASSWORD=benchmark_password_123 SCALE=$SCALE python3 -u /scripts/benchmark_paradedb.py --transactions $TRANSACTIONS --concurrency $CONCURRENCY
         elif [[ "$db" == "elasticsearch" ]]; then
-            kubectl exec $runner_pod -- env ES_HOST=elasticsearch-service ES_PORT=9200 INDEX_NAME=documents SCALE=$SCALE TRANSACTIONS=$TRANSACTIONS CONCURRENCY=$CONCURRENCY python3 /scripts/elasticsearch_benchmark.py --quiet
-            # Copy results back
-            kubectl cp $runner_pod:/tmp/data_loading_time.txt "$RESULTS_DIR/${SCALE}_${db}_data_loading_time.txt" || true
-            kubectl cp $runner_pod:/tmp/index_creation_time.txt "$RESULTS_DIR/${SCALE}_${db}_index_creation_time.txt" || true
-            kubectl cp $runner_pod:/tmp/query1_time.txt "$RESULTS_DIR/${SCALE}_${db}_query1_time.txt" || true
-            kubectl cp $runner_pod:/tmp/query2_time.txt "$RESULTS_DIR/${SCALE}_${db}_query2_time.txt" || true
-            kubectl cp $runner_pod:/tmp/query3_time.txt "$RESULTS_DIR/${SCALE}_${db}_query3_time.txt" || true
+            kubectl exec $runner_pod -- env ES_HOST=elasticsearch-service ES_PORT=9200 INDEX_NAME=documents SCALE=$SCALE TRANSACTIONS=$TRANSACTIONS CONCURRENCY=$CONCURRENCY python3 -u /scripts/elasticsearch_benchmark.py
         fi
+        
+        # Copy results back
+        kubectl cp $runner_pod:/tmp/results.json "$RESULTS_DIR/${SCALE}_${db}_results.json" || true
+        
+        # Stop monitoring
+        if [[ -n "$monitor_pid" ]]; then
+            kill $monitor_pid
+            print_info "Resource monitoring stopped"
+        fi
+        
         print_success "$db benchmark completed"
     else
         print_warning "kubectl not available - skipping $db benchmark"

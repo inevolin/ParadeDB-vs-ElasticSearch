@@ -139,6 +139,10 @@ def load_data(session, es_host, es_port, index_name, scale, quiet=False):
     if not quiet:
         print(f"Loading data from {data_file}...")
     
+    # Disable refresh interval for faster loading
+    settings_url = f"http://{es_host}:{es_port}/{index_name}/_settings"
+    session.put(settings_url, json={"index": {"refresh_interval": "-1"}}, timeout=10)
+
     # Send bulk requests in batches
     batch_size = 5000
     bulk_data = ""
@@ -172,6 +176,9 @@ def load_data(session, es_host, es_port, index_name, scale, quiet=False):
             print(f"Bulk load failed: {response.text}", file=sys.stderr)
             return False
     
+    # Restore refresh interval
+    session.put(settings_url, json={"index": {"refresh_interval": "1s"}}, timeout=10)
+
     # Refresh index
     refresh_url = f"http://{es_host}:{es_port}/{index_name}/_refresh"
     session.post(refresh_url, timeout=10)
@@ -208,6 +215,17 @@ def load_data(session, es_host, es_port, index_name, scale, quiet=False):
     # Save data loading time
     with open('/tmp/data_loading_time.txt', 'w') as f:
         f.write(f"Data loading time: {loading_time:.6f}s\n")
+
+    # Measure database size
+    stats_url = f"http://{es_host}:{es_port}/_stats/store"
+    try:
+        response = session.get(stats_url, timeout=10)
+        if response.status_code == 200:
+            size_bytes = response.json()['_all']['primaries']['store']['size_in_bytes']
+            with open('/tmp/database_size.txt', 'w') as f:
+                f.write(f"Database size: {size_bytes} bytes\n")
+    except Exception as e:
+        print(f"Failed to measure database size: {e}", file=sys.stderr)
     
     return True
 
@@ -254,11 +272,18 @@ def run_query(session, es_host, es_port, index_name, query_body):
 def run_concurrent_queries(session, es_host, es_port, index_name, query_type, transactions, concurrency, quiet=False):
     """Run queries concurrently with connection pooling"""
     
+    # Load config
+    config_file = '/config/benchmark_config.json'
+    with open(config_file, 'r') as f:
+        benchmark_config = json.load(f)
+    
+    queries_config = benchmark_config['queries']
+
     # Query configurations
     query_configs = {
         1: {
             'name': 'Simple Term Search',
-            'terms': ["data", "information", "system", "service", "request", "report", "analysis", "record"],
+            'terms': queries_config['simple']['terms'],
             'query_template': lambda term: {
                 "query": {"match": {"content": term}},
                 "size": 10,
@@ -268,7 +293,7 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
         },
         2: {
             'name': 'Phrase Search', 
-            'terms': ["public data", "service request", "data analysis", "information system", "record management", "data processing", "service delivery", "information access"],
+            'terms': queries_config['phrase']['terms'],
             'query_template': lambda phrase: {
                 "query": {"match_phrase": {"content": phrase}},
                 "size": 10,
@@ -278,8 +303,8 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
         },
         3: {
             'name': 'Complex Query',
-            'term1s': ["data", "information", "system", "service", "request", "report", "analysis", "record"],
-            'term2s': ["public", "management", "processing", "delivery", "access", "collection", "storage", "retrieval"],
+            'term1s': queries_config['complex']['term1s'],
+            'term2s': queries_config['complex']['term2s'],
             'query_template': lambda term1, term2: {
                 "query": {"bool": {"should": [
                     {"match": {"content": term1}},
@@ -394,16 +419,48 @@ def main():
     if not quiet:
         print("Running benchmark queries...")
     
+    results = {
+        "database": "elasticsearch",
+        "scale": scale,
+        "metrics": {}
+    }
+
+    # Collect metrics from files
+    try:
+        with open('/tmp/data_loading_time.txt', 'r') as f:
+            results['metrics']['data_loading_time'] = float(f.read().split(':')[1].strip().rstrip('s'))
+    except: pass
+
+    try:
+        with open('/tmp/index_creation_time.txt', 'r') as f:
+            results['metrics']['index_creation_time'] = float(f.read().split(':')[1].strip().rstrip('s'))
+    except: pass
+    
+    try:
+        with open('/tmp/database_size.txt', 'r') as f:
+            results['metrics']['database_size_bytes'] = int(f.read().split(':')[1].strip().split(' ')[0])
+    except: pass
+
     for query_type in [1, 2, 3]:
         avg_latency, total_time = run_concurrent_queries(
             session, es_host, es_port, index_name, query_type,
             transactions, concurrency, quiet
         )
         
+        results['metrics'][f'query_{query_type}'] = {
+            "average_latency": avg_latency,
+            "total_time": total_time,
+            "tps": transactions / total_time if total_time > 0 else 0
+        }
+        
         # Write results to files (matching the shell script output format)
         with open(f'/tmp/query{query_type}_time.txt', 'w') as f:
             f.write(f"Average Latency for Query {query_type}: {avg_latency:.6f}s\n")
             f.write(f"Wall time for Query {query_type}: {total_time:.6f}s\n")
+    
+    # Write full results to JSON
+    with open('/tmp/results.json', 'w') as f:
+        json.dump(results, f, indent=2)
     
     if not quiet:
         print("Benchmark completed. Results saved to /tmp/")

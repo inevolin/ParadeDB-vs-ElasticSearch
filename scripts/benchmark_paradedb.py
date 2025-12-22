@@ -10,6 +10,8 @@ import json
 import os
 import subprocess
 import psycopg2
+import io
+import csv
 from psycopg2 import pool
 from psycopg2.extras import execute_values
 
@@ -175,12 +177,12 @@ def load_data(host, port, user, password, db_name, scale, data_dir="/data"):
                     count += 1
                     
                     if len(documents) >= batch_size:
-                        values = [(d.get('title', ''), d.get('content', '')) for d in documents]
-                        execute_values(
-                            cursor,
-                            "INSERT INTO documents (title, content) VALUES %s",
-                            values
-                        )
+                        s_buf = io.StringIO()
+                        writer = csv.writer(s_buf)
+                        for d in documents:
+                            writer.writerow([d.get('title', ''), d.get('content', '')])
+                        s_buf.seek(0)
+                        cursor.copy_expert("COPY documents (title, content) FROM STDIN WITH (FORMAT CSV)", s_buf)
                         documents = []
                         
                     if count >= expected_size:
@@ -192,12 +194,12 @@ def load_data(host, port, user, password, db_name, scale, data_dir="/data"):
         
         # Insert remaining documents
         if documents:
-            values = [(d.get('title', ''), d.get('content', '')) for d in documents]
-            execute_values(
-                cursor,
-                "INSERT INTO documents (title, content) VALUES %s",
-                values
-            )
+            s_buf = io.StringIO()
+            writer = csv.writer(s_buf)
+            for d in documents:
+                writer.writerow([d.get('title', ''), d.get('content', '')])
+            s_buf.seek(0)
+            cursor.copy_expert("COPY documents (title, content) FROM STDIN WITH (FORMAT CSV)", s_buf)
         
         conn.commit()
         end_time = time.perf_counter()
@@ -256,6 +258,12 @@ def create_index(host, port, user, password, db_name):
         # Save index creation time
         with open('/tmp/index_creation_time.txt', 'w') as f:
             f.write(f"Index creation time: {index_time:.6f}s\n")
+
+        # Measure database size
+        cursor.execute("SELECT pg_database_size(current_database());")
+        size_bytes = cursor.fetchone()[0]
+        with open('/tmp/database_size.txt', 'w') as f:
+            f.write(f"Database size: {size_bytes} bytes\n")
             
     finally:
         if conn:
@@ -279,22 +287,29 @@ def run_single_query(conn_pool, db_name, query_sql):
 def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurrency, quiet=False):
     """Run queries concurrently"""
 
+    # Load config
+    config_file = '/config/benchmark_config.json'
+    with open(config_file, 'r') as f:
+        benchmark_config = json.load(f)
+    
+    queries_config = benchmark_config['queries']
+
     # Query configurations
     query_configs = {
         1: {
             'name': 'Simple Term Search',
-            'terms': ["data", "information", "system", "service", "request", "report", "analysis", "record"],
+            'terms': queries_config['simple']['terms'],
             'query_template': lambda term: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{term}' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
         },
         2: {
             'name': 'Phrase Search',
-            'terms': ["public data", "service request", "data analysis", "information system", "record management", "data processing", "service delivery", "information access"],
+            'terms': queries_config['phrase']['terms'],
             'query_template': lambda phrase: f"SELECT id, title FROM documents WHERE documents @@@ 'content:\"{phrase}\"' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
         },
         3: {
             'name': 'Complex Query',
-            'term1s': ["data", "information", "system", "service", "request", "report", "analysis", "record"],
-            'term2s': ["public", "management", "processing", "delivery", "access", "collection", "storage", "retrieval"],
+            'term1s': queries_config['complex']['term1s'],
+            'term2s': queries_config['complex']['term2s'],
             'query_template': lambda term1, term2: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{term1} OR content:{term2}' ORDER BY paradedb.score(documents) DESC LIMIT 20;"
         }
     }
@@ -413,17 +428,49 @@ def main():
         if not args.quiet:
             print("Running benchmark queries...")
 
+        results = {
+            "database": "paradedb",
+            "scale": args.scale,
+            "metrics": {}
+        }
+
+        # Collect metrics from files
+        try:
+            with open('/tmp/data_loading_time.txt', 'r') as f:
+                results['metrics']['data_loading_time'] = float(f.read().split(':')[1].strip().rstrip('s'))
+        except: pass
+
+        try:
+            with open('/tmp/index_creation_time.txt', 'r') as f:
+                results['metrics']['index_creation_time'] = float(f.read().split(':')[1].strip().rstrip('s'))
+        except: pass
+        
+        try:
+            with open('/tmp/database_size.txt', 'r') as f:
+                results['metrics']['database_size_bytes'] = int(f.read().split(':')[1].strip().split(' ')[0])
+        except: pass
+
         # Run all three query types
         for query_type in [1, 2, 3]:
             avg_latency, total_time = run_concurrent_queries(
                 benchmark_pool, args.dbname, query_type,
                 args.transactions, args.concurrency, args.quiet
             )
+            
+            results['metrics'][f'query_{query_type}'] = {
+                "average_latency": avg_latency,
+                "total_time": total_time,
+                "tps": args.transactions / total_time if total_time > 0 else 0
+            }
 
             # Write results to files (matching the shell script output format)
             with open(f'/tmp/query{query_type}_time.txt', 'w') as f:
                 f.write(f"Average Latency for Query {query_type}: {avg_latency:.6f}s\n")
                 f.write(f"Wall time for Query {query_type}: {total_time:.6f}s\n")
+        
+        # Write full results to JSON
+        with open('/tmp/results.json', 'w') as f:
+            json.dump(results, f, indent=2)
 
         if not args.quiet:
             print("Benchmark completed. Results saved to /tmp/")

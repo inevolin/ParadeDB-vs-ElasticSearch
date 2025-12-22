@@ -76,6 +76,20 @@ The benchmarks were conducted using a containerized environment to ensure isolat
         5.  **Boolean Query**: A complex combination of MUST, SHOULD, and NOT clauses (e.g., MUST contain "strategy", SHOULD contain "growth", MUST NOT contain "risk"). Tests the query engine's ability to handle complex logic and filtering.
     *   **Concurrency**: Tests were run with 1, 10, and 100 concurrent clients to evaluate scalability.
 
+## ⚙️ Technical Implementation Details
+
+*   **Data Generation**:
+    *   Synthetic data is generated using real English words (sourced from `dwyl/english-words`) to ensure realistic term frequency and distribution, rather than random character strings.
+    *   Documents simulate business reports with fields like `title`, `description`, `category`, etc.
+
+*   **Client Implementation**:
+    *   **ParadeDB**: Uses `psycopg2` with `ThreadedConnectionPool` to efficiently manage database connections across concurrent threads.
+    *   **Elasticsearch**: Uses Python `requests` with `HTTPAdapter` to enable connection pooling and automatic retries, ensuring optimal HTTP performance.
+    *   **Concurrency Model**: Both benchmarks utilize Python's `ThreadPoolExecutor` to spawn concurrent worker threads, simulating real-world parallel user requests.
+
+*   **Resource Monitoring**:
+    *   Real-time resource usage (CPU & Memory) is captured using `docker stats` (since `kubectl top` was not available in the local environment) to ensure accurate measurement of container overhead.
+
 ## 🛠️ How to Reproduce
 
 To run these benchmarks yourself and verify the results:

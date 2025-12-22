@@ -282,7 +282,7 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
     # Query configurations
     query_configs = {
         1: {
-            'name': 'Simple Term Search',
+            'name': 'Simple Search',
             'terms': queries_config['simple']['terms'],
             'query_template': lambda term: {
                 "query": {"match": {"content": term}},
@@ -314,6 +314,33 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
                 "_source": ["title"],
                 "sort": [{"_score": "desc"}]
             }
+        },
+        4: {
+            'name': 'Top-N Query',
+            'terms': queries_config['top_n']['terms'],
+            'n': queries_config['top_n']['n'],
+            'query_template': lambda term, n: {
+                "query": {"match": {"content": term}},
+                "size": n,
+                "_source": ["title"],
+                "sort": [{"_score": "desc"}]
+            }
+        },
+        5: {
+            'name': 'Boolean Query',
+            'must_terms': queries_config['boolean']['must_terms'],
+            'should_terms': queries_config['boolean']['should_terms'],
+            'not_terms': queries_config['boolean']['not_terms'],
+            'query_template': lambda must, should, not_term: {
+                "query": {"bool": {
+                    "must": [{"match": {"content": must}}],
+                    "should": [{"match": {"content": should}}],
+                    "must_not": [{"match": {"content": not_term}}]
+                }},
+                "size": 10,
+                "_source": ["title"],
+                "sort": [{"_score": "desc"}]
+            }
         }
     }
     
@@ -340,6 +367,18 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
                 term1 = config['term1s'][term1_idx]
                 term2 = config['term2s'][term2_idx]
                 query_body = config['query_template'](term1, term2)
+            elif query_type == 4:
+                term_idx = (i - 1) % len(config['terms'])
+                term = config['terms'][term_idx]
+                query_body = config['query_template'](term, config['n'])
+            elif query_type == 5:
+                must_idx = (i - 1) % len(config['must_terms'])
+                should_idx = (i - 1) % len(config['should_terms'])
+                not_idx = (i - 1) % len(config['not_terms'])
+                must = config['must_terms'][must_idx]
+                should = config['should_terms'][should_idx]
+                not_term = config['not_terms'][not_idx]
+                query_body = config['query_template'](must, should, not_term)
             else:
                 term_idx = (i - 1) % len(config['terms'])
                 term = config['terms'][term_idx]
@@ -407,7 +446,7 @@ def main():
     if not quiet:
         print("Warming up...")
         
-    for query_type in [1, 2, 3]:
+    for query_type in [1, 2, 3, 4, 5]:
         run_concurrent_queries(
             session, es_host, es_port, index_name, query_type,
             transactions=max(1, transactions // 10),
@@ -441,7 +480,7 @@ def main():
             results['metrics']['database_size_bytes'] = int(f.read().split(':')[1].strip().split(' ')[0])
     except: pass
 
-    for query_type in [1, 2, 3]:
+    for query_type in [1, 2, 3, 4, 5]:
         avg_latency, total_time = run_concurrent_queries(
             session, es_host, es_port, index_name, query_type,
             transactions, concurrency, quiet

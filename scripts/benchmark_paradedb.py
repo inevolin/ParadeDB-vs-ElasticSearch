@@ -297,7 +297,7 @@ def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurr
     # Query configurations
     query_configs = {
         1: {
-            'name': 'Simple Term Search',
+            'name': 'Simple Search',
             'terms': queries_config['simple']['terms'],
             'query_template': lambda term: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{term}' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
         },
@@ -311,6 +311,19 @@ def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurr
             'term1s': queries_config['complex']['term1s'],
             'term2s': queries_config['complex']['term2s'],
             'query_template': lambda term1, term2: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{term1} OR content:{term2}' ORDER BY paradedb.score(documents) DESC LIMIT 20;"
+        },
+        4: {
+            'name': 'Top-N Query',
+            'terms': queries_config['top_n']['terms'],
+            'n': queries_config['top_n']['n'],
+            'query_template': lambda term, n: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{term}' ORDER BY paradedb.score(documents) DESC LIMIT {n};"
+        },
+        5: {
+            'name': 'Boolean Query',
+            'must_terms': queries_config['boolean']['must_terms'],
+            'should_terms': queries_config['boolean']['should_terms'],
+            'not_terms': queries_config['boolean']['not_terms'],
+            'query_template': lambda must, should, not_term: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{must} AND (content:{should}) AND NOT content:{not_term}' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
         }
     }
 
@@ -337,6 +350,18 @@ def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurr
                 term1 = config['term1s'][term1_idx]
                 term2 = config['term2s'][term2_idx]
                 query_sql = config['query_template'](term1, term2)
+            elif query_type == 4:
+                term_idx = (i - 1) % len(config['terms'])
+                term = config['terms'][term_idx]
+                query_sql = config['query_template'](term, config['n'])
+            elif query_type == 5:
+                must_idx = (i - 1) % len(config['must_terms'])
+                should_idx = (i - 1) % len(config['should_terms'])
+                not_idx = (i - 1) % len(config['not_terms'])
+                must = config['must_terms'][must_idx]
+                should = config['should_terms'][should_idx]
+                not_term = config['not_terms'][not_idx]
+                query_sql = config['query_template'](must, should, not_term)
             else:
                 term_idx = (i - 1) % len(config['terms'])
                 term = config['terms'][term_idx]
@@ -417,7 +442,7 @@ def main():
             print("Warming up...")
             
         # Warmup
-        for query_type in [1, 2, 3]:
+        for query_type in [1, 2, 3, 4, 5]:
             run_concurrent_queries(
                 benchmark_pool, args.dbname, query_type,
                 transactions=max(1, args.transactions // 10),
@@ -450,8 +475,8 @@ def main():
                 results['metrics']['database_size_bytes'] = int(f.read().split(':')[1].strip().split(' ')[0])
         except: pass
 
-        # Run all three query types
-        for query_type in [1, 2, 3]:
+        # Run all five query types
+        for query_type in [1, 2, 3, 4, 5]:
             avg_latency, total_time = run_concurrent_queries(
                 benchmark_pool, args.dbname, query_type,
                 args.transactions, args.concurrency, args.quiet

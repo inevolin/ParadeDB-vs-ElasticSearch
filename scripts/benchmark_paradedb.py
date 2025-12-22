@@ -11,44 +11,15 @@ import os
 import subprocess
 import psycopg2
 from psycopg2 import pool
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from psycopg2.extras import execute_values
+
+try:
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+except ImportError:
+    # concurrent.futures is built-in in Python 3
+    pass
+
 import argparse
-
-def install_python_if_needed(quiet=False):
-    """Install Python3 and required packages if not available"""
-    try:
-        import psycopg2
-        import requests
-        return True
-    except ImportError:
-        if not quiet:
-            print("Installing Python dependencies...")
-
-        # Install Python3 if not present
-        try:
-            subprocess.run([sys.executable, "--version"], check=True, capture_output=True)
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            if not quiet:
-                print("Python3 not found, installing...")
-            # Download and install Python3 static binary for ARM64
-            arch = subprocess.run(["uname", "-m"], capture_output=True, text=True).stdout.strip()
-            if arch in ["aarch64", "arm64"]:
-                python_url = "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7+20240107-aarch64-unknown-linux-gnu-install_only.tar.gz"
-            else:
-                python_url = "https://github.com/indygreg/python-build-standalone/releases/download/20240107/cpython-3.11.7+20240107-x86_64-unknown-linux-gnu-install_only.tar.gz"
-
-            subprocess.run(["curl", "-L", "-o", "/tmp/python.tar.gz", python_url], check=True)
-            subprocess.run(["tar", "-xzf", "/tmp/python.tar.gz", "-C", "/tmp"], check=True)
-            python_dir = "/tmp/python"
-            os.environ["PATH"] = f"{python_dir}/bin:{os.environ.get('PATH', '')}"
-            sys.executable = f"{python_dir}/bin/python3"
-
-        # Install pip packages
-        subprocess.run([sys.executable, "-m", "pip", "install", "--user", "psycopg2-binary", "requests"], check=True)
-
-        if not quiet:
-            print("Python dependencies installed")
-        return True
 
 def create_connection_pool(host, port, dbname, user, password, min_conn=1, max_conn=10):
     """Create a PostgreSQL connection pool"""
@@ -72,10 +43,9 @@ def create_connection_pool(host, port, dbname, user, password, min_conn=1, max_c
         print(f"Failed to create connection pool: {e}", file=sys.stderr)
         sys.exit(1)
 
-def wait_for_database(host, port, user, password, quiet=False):
+def wait_for_database(host, port, user, password):
     """Wait for database to be ready"""
-    if not quiet:
-        print("Waiting for ParadeDB to be ready...")
+    print("Waiting for ParadeDB to be ready...")
 
     max_attempts = 30
     attempt = 0
@@ -91,22 +61,19 @@ def wait_for_database(host, port, user, password, quiet=False):
                 connect_timeout=5
             )
             conn.close()
-            if not quiet:
-                print("Database is ready!")
+            print("Database is ready!")
             return True
         except psycopg2.OperationalError:
-            if not quiet:
-                print(f"Waiting for database... (attempt {attempt + 1}/{max_attempts})")
+            print(f"Waiting for database... (attempt {attempt + 1}/{max_attempts})")
             time.sleep(2)
             attempt += 1
 
     print("Database failed to become ready", file=sys.stderr)
     return False
 
-def setup_database(host, port, user, password, db_name, quiet=False):
+def setup_database(host, port, user, password, db_name):
     """Create database and table"""
-    if not quiet:
-        print("Setting up database...")
+    print("Setting up database...")
 
     conn = None
     try:
@@ -129,10 +96,9 @@ def setup_database(host, port, user, password, db_name, quiet=False):
         if conn:
             conn.close()
 
-def create_table(host, port, user, password, db_name, quiet=False):
+def create_table(host, port, user, password, db_name):
     """Create the documents table"""
-    if not quiet:
-        print("Creating table...")
+    print("Creating table...")
 
     conn = None
     try:
@@ -161,10 +127,11 @@ def create_table(host, port, user, password, db_name, quiet=False):
         if conn:
             conn.close()
 
-def load_data(host, port, user, password, db_name, scale, data_dir="/data", quiet=False):
+def load_data(host, port, user, password, db_name, scale, data_dir="/data"):
     """Load synthetic data into the database"""
-    if not quiet:
-        print("Loading data...")
+    print("Loading data...")
+
+    start_time = time.perf_counter()
 
     # Load config
     config_file = '/config/benchmark_config.json'
@@ -179,11 +146,9 @@ def load_data(host, port, user, password, db_name, scale, data_dir="/data", quie
     }
     expected_size = config['data'][scale_size_map[scale]]
     
-    # Read pre-generated data from host
-    if not quiet:
-        print(f"Loading {dataset['name']} synthetic dataset...")
-    
     data_file = f'/data/documents_{scale}.json'
+    
+    print(f"Loading data from {data_file}...")
     
     # Parse the pre-generated JSON data in batches
     batch_size = 10000
@@ -211,8 +176,9 @@ def load_data(host, port, user, password, db_name, scale, data_dir="/data", quie
                     
                     if len(documents) >= batch_size:
                         values = [(d.get('title', ''), d.get('content', '')) for d in documents]
-                        cursor.executemany(
-                            "INSERT INTO documents (title, content) VALUES (%s, %s)",
+                        execute_values(
+                            cursor,
+                            "INSERT INTO documents (title, content) VALUES %s",
                             values
                         )
                         documents = []
@@ -227,14 +193,20 @@ def load_data(host, port, user, password, db_name, scale, data_dir="/data", quie
         # Insert remaining documents
         if documents:
             values = [(d.get('title', ''), d.get('content', '')) for d in documents]
-            cursor.executemany(
-                "INSERT INTO documents (title, content) VALUES (%s, %s)",
+            execute_values(
+                cursor,
+                "INSERT INTO documents (title, content) VALUES %s",
                 values
             )
         
         conn.commit()
-        if not quiet:
-            print(f"Loaded {count} documents")
+        end_time = time.perf_counter()
+        loading_time = end_time - start_time
+        print(f"Loaded {count} documents")
+        
+        # Save data loading time
+        with open('/tmp/data_loading_time.txt', 'w') as f:
+            f.write(f"Data loading time: {loading_time:.6f}s\n")
             
     except Exception as e:
         print(f"Error during data loading: {e}", file=sys.stderr)
@@ -243,10 +215,11 @@ def load_data(host, port, user, password, db_name, scale, data_dir="/data", quie
         if conn:
             conn.close()
 
-def create_index(host, port, user, password, db_name, quiet=False):
+def create_index(host, port, user, password, db_name):
     """Create the BM25 search index"""
-    if not quiet:
-        print("Creating search index...")
+    print("Creating search index...")
+
+    start_time = time.perf_counter()
 
     conn = None
     try:
@@ -268,8 +241,14 @@ def create_index(host, port, user, password, db_name, quiet=False):
         """)
 
         conn.commit()
-        if not quiet:
-            print("Search index created")
+        end_time = time.perf_counter()
+        index_time = end_time - start_time
+        print("Search index created")
+        
+        # Save index creation time
+        with open('/tmp/index_creation_time.txt', 'w') as f:
+            f.write(f"Index creation time: {index_time:.6f}s\n")
+            
     finally:
         if conn:
             conn.close()
@@ -302,7 +281,7 @@ def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurr
         2: {
             'name': 'Phrase Search',
             'terms': ["public data", "service request", "data analysis", "information system", "record management", "data processing", "service delivery", "information access"],
-            'query_template': lambda phrase: f"SELECT id, title FROM documents WHERE documents @@@ 'content:\"{phrase}\"' LIMIT 10;"
+            'query_template': lambda phrase: f"SELECT id, title FROM documents WHERE documents @@@ 'content:\"{phrase}\"' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
         },
         3: {
             'name': 'Complex Query',
@@ -319,7 +298,6 @@ def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurr
     # Calculate transactions per worker
     transactions_per_worker = (transactions + concurrency - 1) // concurrency
 
-    total_time = 0
     completed_transactions = 0
 
     def worker_task(worker_id):
@@ -347,22 +325,27 @@ def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurr
 
         return worker_time, worker_transactions
 
-    # Run workers concurrently
+    # Run workers concurrently and measure wall time
+    start_time = time.perf_counter()
+    total_latency = 0
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         futures = [executor.submit(worker_task, worker_id) for worker_id in range(1, concurrency + 1)]
 
         for future in as_completed(futures):
             worker_time, worker_transactions = future.result()
-            total_time += worker_time
             completed_transactions += worker_transactions
+            total_latency += worker_time
+    end_time = time.perf_counter()
+    wall_time = end_time - start_time
 
-    avg_time = total_time / transactions if transactions > 0 else 0
+    avg_latency = total_latency / transactions if transactions > 0 else 0
 
     if not quiet:
-        print(f"Average time for Query {query_type}: {avg_time:.6f}s")
-        print(f"Total time for Query {query_type}: {total_time:.6f}s")
+        print(f"Average Latency for Query {query_type}: {avg_latency:.6f}s")
+        print(f"Wall time for Query {query_type}: {wall_time:.6f}s")
+        print(f"TPS for Query {query_type}: {transactions / wall_time:.2f}")
 
-    return avg_time, total_time
+    return avg_latency, wall_time
 
 def main():
     parser = argparse.ArgumentParser(description='ParadeDB Benchmark Script')
@@ -379,18 +362,15 @@ def main():
 
     args = parser.parse_args()
 
-    # Install Python dependencies if needed
-    install_python_if_needed(args.quiet)
-
     # Wait for database
-    if not wait_for_database(args.host, args.port, args.user, args.password, args.quiet):
+    if not wait_for_database(args.host, args.port, args.user, args.password):
         sys.exit(1)
 
     # Setup operations using direct connections
-    setup_database(args.host, args.port, args.user, args.password, args.dbname, args.quiet)
-    create_table(args.host, args.port, args.user, args.password, args.dbname, args.quiet)
-    load_data(args.host, args.port, args.user, args.password, args.dbname, args.scale, args.data_dir, args.quiet)
-    create_index(args.host, args.port, args.user, args.password, args.dbname, args.quiet)
+    setup_database(args.host, args.port, args.user, args.password, args.dbname)
+    create_table(args.host, args.port, args.user, args.password, args.dbname)
+    load_data(args.host, args.port, args.user, args.password, args.dbname, args.scale, args.data_dir)
+    create_index(args.host, args.port, args.user, args.password, args.dbname)
 
     # Create connection pool for benchmark operations
     benchmark_pool = create_connection_pool(
@@ -411,19 +391,31 @@ def main():
 
     try:
         if not args.quiet:
+            print("Warming up...")
+            
+        # Warmup
+        for query_type in [1, 2, 3]:
+            run_concurrent_queries(
+                benchmark_pool, args.dbname, query_type,
+                transactions=max(1, args.transactions // 10),
+                concurrency=args.concurrency,
+                quiet=True
+            )
+
+        if not args.quiet:
             print("Running benchmark queries...")
 
         # Run all three query types
         for query_type in [1, 2, 3]:
-            avg_time, total_time = run_concurrent_queries(
+            avg_latency, total_time = run_concurrent_queries(
                 benchmark_pool, args.dbname, query_type,
                 args.transactions, args.concurrency, args.quiet
             )
 
             # Write results to files (matching the shell script output format)
             with open(f'/tmp/query{query_type}_time.txt', 'w') as f:
-                f.write(f"Average time for Query {query_type}: {avg_time:.6f}s\n")
-                f.write(f"Total time for Query {query_type}: {total_time:.6f}s\n")
+                f.write(f"Average Latency for Query {query_type}: {avg_latency:.6f}s\n")
+                f.write(f"Wall time for Query {query_type}: {total_time:.6f}s\n")
 
         if not args.quiet:
             print("Benchmark completed. Results saved to /tmp/")

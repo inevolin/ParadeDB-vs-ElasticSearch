@@ -10,38 +10,64 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
-def parse_time_file(filepath):
-    """Parse timing file and extract average and total times in seconds"""
+def parse_startup_file(filepath):
+    """Parse startup time file and extract startup time in seconds"""
     try:
         with open(filepath, 'r') as f:
             content = f.read()
-            avg_time = None
-            total_time = None
-            
             for line in content.split('\n'):
                 line = line.strip()
-                if line.startswith('Average time'):
+                if line.startswith('Startup time'):
                     time_str = line.split(':')[1].strip()
-                    avg_time = float(time_str.rstrip('s'))
-                elif line.startswith('Total time'):
-                    time_str = line.split(':')[1].strip()
-                    total_time = float(time_str.rstrip('s'))
-            
-            return {'average': avg_time, 'total': total_time}
-            
-            # Fallback: Look for "real XmY.ZZZs" format (old format)
+                    return float(time_str.rstrip('s'))
+    except (FileNotFoundError, ValueError):
+        pass
+    return None
+
+def parse_data_loading_file(filepath):
+    """Parse data loading time file and extract data loading time in seconds"""
+    try:
+        with open(filepath, 'r') as f:
+            content = f.read()
             for line in content.split('\n'):
-                if line.strip().startswith('real'):
-                    time_str = line.split()[1]
-                    # Convert XmY.ZZZs to seconds
-                    if 'm' in time_str:
-                        minutes, seconds = time_str.split('m')
-                        seconds = seconds.rstrip('s')
-                        total_seconds = float(minutes) * 60 + float(seconds)
-                    else:
-                        total_seconds = float(time_str.rstrip('s'))
-                    return {'average': total_seconds, 'total': total_seconds}
-    except (FileNotFoundError, ValueError, IndexError):
+                line = line.strip()
+                if 'Data loading' in line and 'time' in line:
+                    time_str = line.split(':')[1].strip()
+                    return float(time_str.rstrip('s'))
+    except (FileNotFoundError, ValueError):
+        pass
+    return None
+
+def parse_index_creation_file(filepath):
+    """Parse index creation time file and extract index creation time in seconds"""
+    try:
+        with open(filepath, 'r') as f:
+            content = f.read()
+            for line in content.split('\n'):
+                line = line.strip()
+                if 'Index creation' in line and 'time' in line:
+                    time_str = line.split(':')[1].strip()
+                    return float(time_str.rstrip('s'))
+    except (FileNotFoundError, ValueError):
+        pass
+    return None
+
+def parse_time_file(filepath):
+    """Parse query time file and extract average and total times in seconds"""
+    try:
+        with open(filepath, 'r') as f:
+            content = f.read()
+            times = {}
+            for line in content.split('\n'):
+                line = line.strip()
+                if line.startswith('Average time') or line.startswith('Average Latency'):
+                    time_str = line.split(':')[1].strip()
+                    times['average'] = float(time_str.rstrip('s'))
+                elif line.startswith('Wall time'):
+                    time_str = line.split(':')[1].strip()
+                    times['total'] = float(time_str.rstrip('s'))
+            return times if times else None
+    except (FileNotFoundError, ValueError):
         pass
     return None
 
@@ -59,8 +85,27 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
 
     # Collect all times for totals
     total_times = {db: 0.0 for db in databases}
+    startup_times = {db: None for db in databases}
+    data_loading_times = {db: None for db in databases}
+    index_creation_times = {db: None for db in databases}
     query_times = {query: {db: None for db in databases} for query in queries}
     query_tps = {query: {db: None for db in databases} for query in queries}
+
+    # Collect startup times
+    for db in databases:
+        startup_file = os.path.join(results_dir, f'{scale}_{db}_startup_time.txt')
+        startup_times[db] = parse_startup_file(startup_file)
+
+    # Collect data loading times
+    for db in databases:
+        data_loading_file = os.path.join(results_dir, f'{scale}_{db}_data_loading_time.txt')
+        data_loading_times[db] = parse_data_loading_file(data_loading_file)
+
+    # Collect index creation times (only for paradedb)
+    for db in databases:
+        if db == 'paradedb':
+            index_creation_file = os.path.join(results_dir, f'{scale}_{db}_index_creation_time.txt')
+            index_creation_times[db] = parse_index_creation_file(index_creation_file)
 
     for query in queries:
         for db in databases:
@@ -75,14 +120,56 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
                 if times['total'] is not None:
                     total_times[db] += times['total']
 
-    # Create figure with subplots (2x4: three queries time + total time + three queries TPS + total TPS)
-    fig, axes = plt.subplots(2, 4, figsize=(20, 10))
+    # Create figure with subplots (3x3: startup + data loading/indexing + total query + query times + TPS)
+    fig, axes = plt.subplots(3, 3, figsize=(20, 12))
     axes = axes.flatten()
-    fig.suptitle('ParadeDB vs Elasticsearch Performance Comparison (Time & TPS)', fontsize=16, fontweight='bold')
+    fig.suptitle('ParadeDB vs Elasticsearch Performance Comparison (Setup & Query Times)', fontsize=16, fontweight='bold')
 
-    # Plot query times (first row)
+    # Plot startup times (first row, first plot)
+    ax = axes[0]
+    db_names = []
+    startup_values = []
+    for db in databases:
+        if startup_times[db] is not None:
+            db_names.append(db.title())
+            startup_values.append(startup_times[db])
+
+    if startup_values:
+        bars = ax.bar(range(len(db_names)), startup_values, color=colors[:len(db_names)], alpha=0.7)
+        ax.set_title('Startup Time (seconds)')
+        ax.set_ylabel('Time (s)')
+        ax.set_xticks(range(len(db_names)))
+        ax.set_xticklabels(db_names)
+        for bar, time in zip(bars, startup_values):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, f'{time:.2f}s', 
+                   ha='center', va='bottom', fontsize=10)
+
+    # Plot data loading & indexing times (first row, second plot)
+    ax = axes[1]
+    db_names = []
+    data_loading_values = []
+    for db in databases:
+        value = data_loading_times[db]
+        if index_creation_times[db] is not None:
+            value = (value or 0) + index_creation_times[db]
+        if value is not None:
+            db_names.append(db.title())
+            data_loading_values.append(value)
+
+    if data_loading_values:
+        bars = ax.bar(range(len(db_names)), data_loading_values, color=colors[:len(db_names)], alpha=0.7)
+        ax.set_title('Data Loading & Indexing Time (seconds)')
+        ax.set_ylabel('Time (s)')
+        ax.set_xticks(range(len(db_names)))
+        ax.set_xticklabels(db_names)
+        for bar, time in zip(bars, data_loading_values):
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(data_loading_values)*0.02, 
+                   f'{time:.2f}s', ha='center', va='bottom', fontsize=10)
+
+
+    # Plot query times (second row)
     for i, (query, label) in enumerate(zip(queries, query_labels)):
-        ax = axes[i]
+        ax = axes[i + 3]  # Second row starts at index 3
 
         db_names = []
         times = []
@@ -119,8 +206,8 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
                    fontsize=12, color='gray')
             ax.set_title(f'{label}\nQuery {i+1} - Time', fontweight='bold')
 
-    # Total duration subplot (first row, last column)
-    ax = axes[3]
+    # Total duration subplot (first row, third plot)
+    ax = axes[2]
     db_names = []
     totals = []
     for db in databases:
@@ -134,7 +221,7 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height + max(totals)*0.02,
                    f'{total:.4f}', ha='center', va='bottom', fontweight='bold')
-        ax.set_title('Total Test Duration', fontweight='bold')
+        ax.set_title('Total Query Duration', fontweight='bold')
         ax.set_ylabel('Time (seconds)')
         ax.set_xticks(range(len(db_names)))
         ax.set_xticklabels(db_names, rotation=45, ha='right')
@@ -144,11 +231,11 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
         ax.text(0.5, 0.5, 'No data available',
                transform=ax.transAxes, ha='center', va='center',
                fontsize=12, color='gray')
-        ax.set_title('Total Test Duration', fontweight='bold')
+        ax.set_title('Total Query Duration', fontweight='bold')
 
-    # Plot query TPS (second row)
+    # Plot query TPS (third row)
     for i, (query, label) in enumerate(zip(queries, query_labels)):
-        ax = axes[i + 4]  # Second row
+        ax = axes[i + 6]  # Third row starts at index 6
 
         db_names = []
         tps_values = []
@@ -184,41 +271,6 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
                    transform=ax.transAxes, ha='center', va='center',
                    fontsize=12, color='gray')
             ax.set_title(f'{label}\nQuery {i+1} - TPS', fontweight='bold')
-
-    # Total TPS subplot (second row, last column)
-    ax = axes[7]
-    db_names = []
-    total_tps_values = []
-    
-    # Calculate total TPS as sum of individual query TPS
-    for db in databases:
-        total_tps = 0
-        count = 0
-        for query in queries:
-            if query_tps[query][db] is not None:
-                total_tps += query_tps[query][db]
-                count += 1
-        if count > 0:
-            db_names.append(db.title())
-            total_tps_values.append(total_tps / count)  # Average TPS across queries
-
-    if total_tps_values:
-        bars = ax.bar(range(len(db_names)), total_tps_values, color=colors[:len(db_names)], alpha=0.7)
-        for bar, tps_val in zip(bars, total_tps_values):
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + max(total_tps_values)*0.02,
-                   f'{tps_val:.2f}', ha='center', va='bottom', fontweight='bold')
-        ax.set_title('Average TPS Across Queries', fontweight='bold')
-        ax.set_ylabel('Transactions Per Second')
-        ax.set_xticks(range(len(db_names)))
-        ax.set_xticklabels(db_names, rotation=45, ha='right')
-        ax.grid(True, alpha=0.3, axis='y')
-        ax.set_ylim(bottom=0)
-    else:
-        ax.text(0.5, 0.5, 'No data available',
-               transform=ax.transAxes, ha='center', va='center',
-               fontsize=12, color='gray')
-        ax.set_title('Average TPS Across Queries', fontweight='bold')
 
     plt.tight_layout()
 
@@ -325,6 +377,29 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
     with open(summary_file, 'w') as f:
         f.write("# Performance Comparison Summary\n\n")
 
+        # Add startup times
+        f.write("Startup Times:\n")
+        for db in databases:
+            if startup_times[db] is not None:
+                f.write(f"  {db.title()}: {startup_times[db]:.2f}s\n")
+            else:
+                f.write(f"  {db.title()}: N/A\n")
+
+        f.write("\n")
+
+        # Add data loading & indexing times
+        f.write("Data Loading & Indexing Times:\n")
+        for db in databases:
+            value = data_loading_times[db]
+            if index_creation_times[db] is not None:
+                value = (value or 0) + index_creation_times[db]
+            if value is not None:
+                f.write(f"  {db.title()}: {value:.2f}s\n")
+            else:
+                f.write(f"  {db.title()}: N/A\n")
+
+        f.write("\n")
+
         for i, (query, label) in enumerate(zip(queries, query_labels)):
             f.write(f"Query {i+1}: {label}\n")
 
@@ -380,6 +455,10 @@ def main():
         databases_env = os.environ.get('DATABASES', 'paradedb elasticsearch')
         databases = databases_env.split()
         scale = ''
+
+    # Default scale to 'small' if empty
+    if not scale:
+        scale = 'small'
 
     print(f"Generating plots for databases: {databases}, scale: {scale}")
 

@@ -1,2 +1,2 @@
-Average time for Query 1: 0.000538s
-Total time for Query 1: 0.053814s
+Average Latency for Query 1: 0.000496s
+Wall time for Query 1: 0.015515s

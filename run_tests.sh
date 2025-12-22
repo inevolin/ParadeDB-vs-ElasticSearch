@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 # Default values
 DATABASES=("paradedb" "elasticsearch")
 CONFIG_FILE="config/benchmark_config.json"
-SCALE=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['benchmark'].get('scale', 'small'))")
+SCALE=$(python3 scripts/config_reader.py "$CONFIG_FILE" "benchmark.scale" "small")
 
 # Define scale-prefixed directories
 DATA_DIR="data"
@@ -23,11 +23,11 @@ RESULTS_DIR="results"
 PLOTS_DIR="plots"
 
 # Load resource defaults from config
-CPU=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['resources']['paradedb']['cpu_request'])")
-MEMORY=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['resources']['paradedb']['memory_request'])")
-JVM_OPTS=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['resources']['elasticsearch']['jvm_opts'])")
-TRANSACTIONS=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['benchmark']['transactions'])")
-CONCURRENCY=$(python3 -c "import json; print(json.load(open('$CONFIG_FILE'))['benchmark']['concurrency'])")
+CPU=$(python3 scripts/config_reader.py "$CONFIG_FILE" "resources.paradedb.cpu_request")
+MEMORY=$(python3 scripts/config_reader.py "$CONFIG_FILE" "resources.paradedb.memory_request")
+JVM_OPTS=$(python3 scripts/config_reader.py "$CONFIG_FILE" "resources.elasticsearch.jvm_opts")
+TRANSACTIONS=$(python3 scripts/config_reader.py "$CONFIG_FILE" "benchmark.transactions")
+CONCURRENCY=$(python3 scripts/config_reader.py "$CONFIG_FILE" "benchmark.concurrency")
 
 
 # Function to print usage
@@ -82,6 +82,15 @@ check_prerequisites() {
         print_info "kubectl found - Kubernetes deployments available"
     else
         print_warning "kubectl not found - manual database setup required"
+    fi
+
+    # Build benchmark runner image
+    print_info "Building benchmark runner Docker image..."
+    if docker build -t benchmark-runner:latest . > /dev/null; then
+        print_success "Benchmark runner image built successfully"
+    else
+        print_error "Failed to build benchmark runner image"
+        exit 1
     fi
 
     print_success "Prerequisites check passed"
@@ -158,7 +167,7 @@ update_k8s_resources() {
 delete_deployments() {
     print_info "Deleting existing deployments..."
     kubectl delete deployments --all
-    kubectl wait --for=delete pod --all --timeout=60s || true
+    kubectl wait --for=delete pod --all --timeout=6s || true
     print_success "Existing deployments deleted"
 }
 
@@ -197,10 +206,10 @@ teardown_database() {
         
         if [[ "$db" == "paradedb" ]]; then
             kubectl delete -f k8s/paradedb-deployment.yaml --ignore-not-found=true || true
-            kubectl wait --for=delete pod -l app=paradedb --timeout=60s || true
+            kubectl wait --for=delete pod -l app=paradedb --timeout=6s || true
         elif [[ "$db" == "elasticsearch" ]]; then
             kubectl delete -f k8s/elasticsearch-deployment.yaml --ignore-not-found=true || true
-            kubectl wait --for=delete pod -l app=elasticsearch --timeout=60s || true
+            kubectl wait --for=delete pod -l app=elasticsearch --timeout=6s || true
         fi
         print_success "$db deployment torn down"
         if [[ "$has_errors" == "true" ]]; then
@@ -220,15 +229,32 @@ setup_database() {
         # Create namespace if it doesn't exist
         kubectl apply -f k8s/namespace.yaml
 
+        # Record deployment start time
+        local DEPLOYMENT_START=$(python3 scripts/get_time.py)
+
+        # Deploy benchmark runner first
+        print_info "Deploying benchmark runner..."
+        kubectl apply -f k8s/benchmark-runner-deployment.yaml
+        kubectl wait --for=condition=ready pod -l app=benchmark-runner --timeout=30s
+
         if [[ "$db" == "paradedb" ]]; then
             print_info "Deploying ParadeDB..."
             kubectl apply -f k8s/paradedb-deployment.yaml
-            kubectl wait --for=condition=ready pod -l app=paradedb --timeout=300s
+            kubectl wait --for=condition=ready pod -l app=paradedb --timeout=30s
         elif [[ "$db" == "elasticsearch" ]]; then
             print_info "Deploying Elasticsearch..."
             kubectl apply -f k8s/elasticsearch-deployment.yaml
-            kubectl wait --for=condition=ready pod -l app=elasticsearch --timeout=300s
+            kubectl wait --for=condition=ready pod -l app=elasticsearch --timeout=30s
         fi
+
+        # Record deployment end time and calculate startup time
+        local DEPLOYMENT_END=$(python3 scripts/get_time.py)
+        local STARTUP_TIME=$(python3 scripts/timing.py $DEPLOYMENT_END $DEPLOYMENT_START)
+
+        # Save startup time to results directory
+        echo "Startup time: ${STARTUP_TIME}s" > "$RESULTS_DIR/${SCALE}_${db}_startup_time.txt"
+        print_info "$db startup time: ${STARTUP_TIME}s"
+
         print_success "$db deployment completed"
     else
         print_warning "kubectl not available. Please ensure $db is running manually."
@@ -250,23 +276,26 @@ run_benchmark() {
     fi
 
     if command -v kubectl &> /dev/null; then
-        # Copy benchmark script to pod and run it
-        local pod_name
+        # Get benchmark runner pod
+        local runner_pod=$(kubectl get pods -l app=benchmark-runner --field-selector=status.phase=Running -o name --sort-by=.metadata.creationTimestamp | tail -1 | cut -d/ -f2)
+        
         if [[ "$db" == "paradedb" ]]; then
-            pod_name=$(kubectl get pods -l app=paradedb --field-selector=status.phase=Running -o name --sort-by=.metadata.creationTimestamp | tail -1 | cut -d/ -f2)
-            kubectl exec $pod_name -- python3 /scripts/benchmark_paradedb.py --scale $SCALE --transactions $TRANSACTIONS --concurrency $CONCURRENCY --quiet
+            # Run the Python benchmark script which handles everything
+            kubectl exec $runner_pod -- env DB_HOST=paradedb-service DB_PORT=5432 POSTGRES_DB=benchmark_db POSTGRES_USER=benchmark_user POSTGRES_PASSWORD=benchmark_password_123 SCALE=$SCALE python3 /scripts/benchmark_paradedb.py --transactions $TRANSACTIONS --concurrency $CONCURRENCY --quiet
             # Copy results back
-            kubectl cp $pod_name:/tmp/query1_time.txt "$RESULTS_DIR/${SCALE}_${db}_query1_time.txt" || true
-            kubectl cp $pod_name:/tmp/query2_time.txt "$RESULTS_DIR/${SCALE}_${db}_query2_time.txt" || true
-            kubectl cp $pod_name:/tmp/query3_time.txt "$RESULTS_DIR/${SCALE}_${db}_query3_time.txt" || true
+            kubectl cp $runner_pod:/tmp/data_loading_time.txt "$RESULTS_DIR/${SCALE}_${db}_data_loading_time.txt" || true
+            kubectl cp $runner_pod:/tmp/index_creation_time.txt "$RESULTS_DIR/${SCALE}_${db}_index_creation_time.txt" || true
+            kubectl cp $runner_pod:/tmp/query1_time.txt "$RESULTS_DIR/${SCALE}_${db}_query1_time.txt" || true
+            kubectl cp $runner_pod:/tmp/query2_time.txt "$RESULTS_DIR/${SCALE}_${db}_query2_time.txt" || true
+            kubectl cp $runner_pod:/tmp/query3_time.txt "$RESULTS_DIR/${SCALE}_${db}_query3_time.txt" || true
         elif [[ "$db" == "elasticsearch" ]]; then
-            pod_name=$(kubectl get pods -l app=elasticsearch --field-selector=status.phase=Running -o name --sort-by=.metadata.creationTimestamp | tail -1 | cut -d/ -f2)
-            kubectl exec $pod_name -- chmod +x /scripts/benchmark_elasticsearch.sh
-            kubectl exec $pod_name -- env SCALE=$SCALE TRANSACTIONS=$TRANSACTIONS CONCURRENCY=$CONCURRENCY /scripts/benchmark_elasticsearch.sh --quiet
+            kubectl exec $runner_pod -- env ES_HOST=elasticsearch-service ES_PORT=9200 INDEX_NAME=documents SCALE=$SCALE TRANSACTIONS=$TRANSACTIONS CONCURRENCY=$CONCURRENCY python3 /scripts/elasticsearch_benchmark.py --quiet
             # Copy results back
-            kubectl cp $pod_name:/tmp/query1_time.txt "$RESULTS_DIR/${SCALE}_${db}_query1_time.txt" || true
-            kubectl cp $pod_name:/tmp/query2_time.txt "$RESULTS_DIR/${SCALE}_${db}_query2_time.txt" || true
-            kubectl cp $pod_name:/tmp/query3_time.txt "$RESULTS_DIR/${SCALE}_${db}_query3_time.txt" || true
+            kubectl cp $runner_pod:/tmp/data_loading_time.txt "$RESULTS_DIR/${SCALE}_${db}_data_loading_time.txt" || true
+            kubectl cp $runner_pod:/tmp/index_creation_time.txt "$RESULTS_DIR/${SCALE}_${db}_index_creation_time.txt" || true
+            kubectl cp $runner_pod:/tmp/query1_time.txt "$RESULTS_DIR/${SCALE}_${db}_query1_time.txt" || true
+            kubectl cp $runner_pod:/tmp/query2_time.txt "$RESULTS_DIR/${SCALE}_${db}_query2_time.txt" || true
+            kubectl cp $runner_pod:/tmp/query3_time.txt "$RESULTS_DIR/${SCALE}_${db}_query3_time.txt" || true
         fi
         print_success "$db benchmark completed"
     else
@@ -381,7 +410,6 @@ check_prerequisites
 generate_data_on_host
 update_k8s_resources
 delete_deployments
-# download_data  # Data is now downloaded by benchmark scripts
 
 # Run benchmarks for each database separately
 for db in "${DATABASES[@]}"; do
@@ -391,6 +419,8 @@ for db in "${DATABASES[@]}"; do
 done
 
 generate_plots
+
+delete_deployments
 
 print_success "Benchmark suite completed successfully!"
 print_info "Results are available in the '$RESULTS_DIR/' directory"

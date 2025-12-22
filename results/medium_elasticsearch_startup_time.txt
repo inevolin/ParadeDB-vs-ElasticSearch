@@ -1,1 +1,1 @@
-Startup time: 12.924s
+Startup time: 12.580s

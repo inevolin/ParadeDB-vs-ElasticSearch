@@ -99,7 +99,13 @@ check_prerequisites() {
 # Function to clean database data
 cleanup_database_data() {
     print_info "Cleaning up database data..."
-    # (delete the PV/PVC if used, or local data directories)
+    if command -v kubectl &> /dev/null; then
+        print_info "Deleting PersistentVolumeClaims to ensure clean state..."
+        kubectl delete pvc paradedb-pvc --ignore-not-found=true
+        kubectl delete pvc elasticsearch-pvc --ignore-not-found=true
+        # Wait a moment to ensure deletion propagates
+        sleep 2
+    fi
 }
 
 # Function to generate data on host
@@ -167,7 +173,7 @@ update_k8s_resources() {
 delete_deployments() {
     print_info "Deleting existing deployments..."
     kubectl delete deployments --all
-    kubectl wait --for=delete pod --all --timeout=6s || true
+    kubectl wait --for=delete pod --all --timeout=15s || true
     print_success "Existing deployments deleted"
 }
 
@@ -206,10 +212,14 @@ teardown_database() {
         
         if [[ "$db" == "paradedb" ]]; then
             kubectl delete -f k8s/paradedb-deployment.yaml --ignore-not-found=true || true
-            kubectl wait --for=delete pod -l app=paradedb --timeout=6s || true
+            kubectl wait --for=delete pod -l app=paradedb --timeout=60s || true
+            # Explicitly ensure PVC is gone
+            kubectl delete pvc paradedb-pvc --ignore-not-found=true
         elif [[ "$db" == "elasticsearch" ]]; then
             kubectl delete -f k8s/elasticsearch-deployment.yaml --ignore-not-found=true || true
-            kubectl wait --for=delete pod -l app=elasticsearch --timeout=6s || true
+            kubectl wait --for=delete pod -l app=elasticsearch --timeout=60s || true
+            # Explicitly ensure PVC is gone
+            kubectl delete pvc elasticsearch-pvc --ignore-not-found=true
         fi
         print_success "$db deployment torn down"
         if [[ "$has_errors" == "true" ]]; then
@@ -235,16 +245,16 @@ setup_database() {
         # Deploy benchmark runner first
         print_info "Deploying benchmark runner..."
         kubectl apply -f k8s/benchmark-runner-deployment.yaml
-        kubectl wait --for=condition=ready pod -l app=benchmark-runner --timeout=30s
+        kubectl wait --for=condition=ready pod -l app=benchmark-runner --timeout=300s
 
         if [[ "$db" == "paradedb" ]]; then
             print_info "Deploying ParadeDB..."
             kubectl apply -f k8s/paradedb-deployment.yaml
-            kubectl wait --for=condition=ready pod -l app=paradedb --timeout=30s
+            kubectl wait --for=condition=ready pod -l app=paradedb --timeout=300s
         elif [[ "$db" == "elasticsearch" ]]; then
             print_info "Deploying Elasticsearch..."
             kubectl apply -f k8s/elasticsearch-deployment.yaml
-            kubectl wait --for=condition=ready pod -l app=elasticsearch --timeout=30s
+            kubectl wait --for=condition=ready pod -l app=elasticsearch --timeout=300s
         fi
 
         # Record deployment end time and calculate startup time

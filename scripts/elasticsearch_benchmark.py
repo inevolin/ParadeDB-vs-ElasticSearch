@@ -176,6 +176,29 @@ def load_data(session, es_host, es_port, index_name, scale, quiet=False):
     refresh_url = f"http://{es_host}:{es_port}/{index_name}/_refresh"
     session.post(refresh_url, timeout=10)
     
+    # Force merge to optimize index (similar to VACUUM)
+    if not quiet:
+        print("Force merging index...")
+    forcemerge_url = f"http://{es_host}:{es_port}/{index_name}/_forcemerge?max_num_segments=1"
+    session.post(forcemerge_url, timeout=300) # Long timeout for merge
+
+    # Wait for all documents to be available
+    if not quiet:
+        print("Waiting for all documents to be indexed...")
+    
+    count_url = f"http://{es_host}:{es_port}/{index_name}/_count"
+    max_retries = 60
+    for i in range(max_retries):
+        try:
+            response = session.get(count_url, timeout=10)
+            if response.status_code == 200:
+                count = response.json().get('count', 0)
+                if count >= expected_size:
+                    break
+        except:
+            pass
+        time.sleep(1)
+    
     end_time = time.perf_counter()
     loading_time = end_time - start_time
     

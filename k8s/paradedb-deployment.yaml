@@ -48,6 +48,21 @@ spec:
       containers:
       - name: paradedb
         image: paradedb/paradedb:latest
+        args:
+          - "-c"
+          - "shared_buffers=2GB"
+          - "-c"
+          - "effective_cache_size=6GB"
+          - "-c"
+          - "work_mem=64MB"
+          - "-c"
+          - "maintenance_work_mem=512MB"
+          - "-c"
+          - "max_worker_processes=8"
+          - "-c"
+          - "max_parallel_workers=8"
+          - "-c"
+          - "max_parallel_workers_per_gather=4"
         ports:
         - containerPort: 5432
           name: postgres

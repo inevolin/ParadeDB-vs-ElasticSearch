@@ -241,6 +241,14 @@ def create_index(host, port, user, password, db_name):
         """)
 
         conn.commit()
+        
+        # Optimize table statistics
+        print("Running VACUUM ANALYZE...")
+        old_isolation_level = conn.isolation_level
+        conn.set_isolation_level(0) # ISOLATION_LEVEL_AUTOCOMMIT
+        cursor.execute("VACUUM ANALYZE documents;")
+        conn.set_isolation_level(old_isolation_level)
+        
         end_time = time.perf_counter()
         index_time = end_time - start_time
         print("Search index created")

@@ -1,1 +1,1 @@
-Index creation time: 16.778021s
+Index creation time: 8.289197s

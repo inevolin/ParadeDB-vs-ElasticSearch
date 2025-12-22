@@ -229,7 +229,7 @@ teardown_database() {
             fi
             
             # Check for errors in logs
-            local errors=$(kubectl logs $pod_name 2>&1 | grep -E "(ERROR|Exception|Failed|FATAL)" | grep -v "JVM arguments" | grep -v "PrematureChannelClosureException" || true)
+            local errors=$(kubectl logs $pod_name 2>&1 | grep -E "(ERROR|Exception|Failed|FATAL)" | grep -v "JVM arguments" | grep -v "PrematureChannelClosureException" | grep -v "canceling autovacuum task" || true)
             local has_errors=false
             if [[ -n "$errors" ]]; then
                 echo "Errors found in $db pod logs:"

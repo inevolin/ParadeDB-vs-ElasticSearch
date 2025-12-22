@@ -13,7 +13,7 @@
     "index_name": "documents"
   },
   "benchmark": {
-    "concurrency": 1,
+    "concurrency": 100,
     "transactions": 100
   },
   "data": {

@@ -149,14 +149,17 @@ def load_data(session, es_host, es_port, index_name, scale, quiet=False):
     batch_count = 0
     total_count = 0
     
-    bulk_url = f"http://{es_host}:{es_port}/_bulk"
+    bulk_url = f"http://{es_host}:{es_port}/_bulk?refresh=true"
     headers = {'Content-Type': 'application/x-ndjson'}
     
     with open(data_file, 'r') as f:
         for line in f:
             bulk_data += line
             batch_count += 1
-            total_count += 1
+            
+            # Only count actual documents (lines that don't start with index action)
+            if not line.strip().startswith('{"index"'):
+                total_count += 1
             
             if batch_count >= batch_size:
                 response = session.post(bulk_url, data=bulk_data, headers=headers, timeout=60)
@@ -195,16 +198,23 @@ def load_data(session, es_host, es_port, index_name, scale, quiet=False):
     
     count_url = f"http://{es_host}:{es_port}/{index_name}/_count"
     max_retries = 60
+    max_retries_reached = True
     for i in range(max_retries):
         try:
             response = session.get(count_url, timeout=10)
             if response.status_code == 200:
                 count = response.json().get('count', 0)
                 if count >= expected_size:
+                    print(f"All documents indexed: {count}")
+                    max_retries_reached = False
                     break
         except:
             pass
         time.sleep(1)
+    if max_retries_reached:
+        print("Timeout waiting for documents to be indexed!!!", file=sys.stderr)
+        print(f"Expected: {expected_size}, Indexed: {count}", file=sys.stderr)
+        raise Exception("Data loading timeout")
     
     end_time = time.perf_counter()
     loading_time = end_time - start_time

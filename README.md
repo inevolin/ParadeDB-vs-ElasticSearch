@@ -37,6 +37,8 @@ For the large dataset, we tested performance across three different concurrency 
 
 #### Visualizations
 
+*(See "Workload" section for details on Query 1-5)*
+
 **1 Client Performance**
 ![1 Client Performance](plots/large_1_10000_performance_comparison.png)
 ![1 Client Summary](plots/large_1_10000_combined_summary.png)
@@ -70,11 +72,11 @@ The benchmarks were conducted using a containerized environment to ensure isolat
 *   **Workload**:
     *   **Ingestion**: Bulk loading of JSON documents.
     *   **Queries**: The benchmark executes a mix of 5 distinct query types to simulate real-world usage patterns:
-        1.  **Simple Search**: Single-term full-text search (e.g., "strategy", "innovation"). Tests basic inverted index lookup speed.
-        2.  **Phrase Search**: Exact phrase matching (e.g., "project management"). Tests position-aware index performance.
-        3.  **Complex Query**: Intersection of two distinct terms (e.g., "global" AND "initiative"). Tests boolean AND logic efficiency.
-        4.  **Top-N Query**: Single-term search with a limit on results (N=50). Tests ranking and retrieval optimization for paginated views.
-        5.  **Boolean Query**: A complex combination of MUST, SHOULD, and NOT clauses (e.g., MUST contain "strategy", SHOULD contain "growth", MUST NOT contain "risk"). Tests the query engine's ability to handle complex logic and filtering.
+        1.  **Query 1 (Simple Search)**: Single-term full-text search (e.g., "strategy", "innovation"). Tests basic inverted index lookup speed.
+        2.  **Query 2 (Phrase Search)**: Exact phrase matching (e.g., "project management"). Tests position-aware index performance.
+        3.  **Query 3 (Complex Query)**: Intersection of two distinct terms (e.g., "global" AND "initiative"). Tests boolean AND logic efficiency.
+        4.  **Query 4 (Top-N Query)**: Single-term search with a limit on results (N=50). Tests ranking and retrieval optimization for paginated views.
+        5.  **Query 5 (Boolean Query)**: A complex combination of MUST, SHOULD, and NOT clauses (e.g., MUST contain "strategy", SHOULD contain "growth", MUST NOT contain "risk"). Tests the query engine's ability to handle complex logic and filtering.
     *   **Concurrency**: Tests were run with 1, 10, and 50 concurrent clients to evaluate scalability.
 
 ### Metric Definitions and Calculations
@@ -135,4 +137,42 @@ To run these benchmarks yourself and verify the results:
     *   Summaries and plots are generated in the `plots/` directory.
     *   Raw timing logs and resource usage data are in the `results/` directory.
     *   Configuration can be tweaked in `config/benchmark_config.json`.
+
+### Advanced Usage
+
+The `run_tests.sh` script supports several flags to customize the benchmark run:
+
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| `-s, --scale` | Data scale (`small`, `medium`, `large`) | `small` |
+| `-c, --concurrency` | Number of concurrent clients | From config |
+| `-t, --transactions` | Number of transactions per query type | From config |
+| `--cpu` | CPU limit for databases (e.g., `4`, `1000m`) | From config |
+| `--mem` | Memory limit for databases (e.g., `8Gi`, `4GB`) | From config |
+| `-d, --databases` | Specific databases to run (`paradedb`, `elasticsearch`) | Both |
+
+**Examples:**
+
+```bash
+# Run with custom concurrency and transaction count
+./run_tests.sh -s medium -c 50 -t 500
+
+# Benchmark only ParadeDB with specific resource limits
+./run_tests.sh -d paradedb --cpu 2 --mem 4Gi
+```
+
+## ⚙️ Configuration
+
+The benchmark is highly configurable via `config/benchmark_config.json`. Key sections include:
+
+*   **`benchmark`**: Global defaults for concurrency and transaction counts.
+*   **`data`**: Defines the number of documents for `small`, `medium`, and `large` scales.
+*   **`resources`**: (Used by the runner) Defines default CPU/Memory requests and limits for the Kubernetes deployments.
+*   **`queries`**: Defines the specific terms used for each query type. You can modify the lists of terms (e.g., `simple.terms`, `complex.term1s`) to change the search corpus.
+
+## ⚠️ Limitations & Future Work
+
+*   **Read-Heavy Focus**: This benchmark primarily focuses on search performance (read latency and throughput). While ingestion time is measured, high-throughput ingestion scenarios (updates, deletes) are not currently covered.
+*   **Single Node**: The current setup deploys single-node instances of both ParadeDB and Elasticsearch. Distributed cluster performance and high-availability scenarios are not tested.
+*   **Cold vs. Warm Cache**: The benchmark runs queries in sequence. While multiple iterations are performed, explicit controls for cold vs. warm cache testing are not strictly enforced, though the "warm-up" effect is naturally captured in the average latency over many transactions.
 

@@ -6,47 +6,48 @@ This project benchmarks the full-text search performance of **ParadeDB** (Postgr
 
 Based on the latest benchmark runs, we observed distinct performance profiles for each system:
 
-*   **Large Datasets (1M documents)**: **Elasticsearch** maintained higher query throughput (TPS) at 1 and 100 concurrent clients, but **ParadeDB** outperformed Elasticsearch at 10 concurrent clients.
-*   **Storage Efficiency**: Elasticsearch storage usage varied between ~1GB and ~2GB depending on segment merging, while ParadeDB consistently used ~2GB.
-*   **Operational Overhead**: Elasticsearch consistently showed faster startup times, while ParadeDB (running as a PG extension) required slightly more time to become ready.
+*   **Large Datasets (1M documents)**: **Elasticsearch** dominated query throughput (TPS) at lower concurrency (1 and 10 clients), but **ParadeDB** scaled better and outperformed Elasticsearch at 50 concurrent clients.
+*   **Storage Efficiency**: Elasticsearch was more storage efficient (~1GB) compared to ParadeDB (~2GB).
+*   **Operational Overhead**: Elasticsearch consistently showed faster startup times (~13s vs ~16s), but ParadeDB was significantly faster at indexing (~80s vs ~135s).
 
 ## 📈 Detailed Results
 
 ### 1. Large Dataset Performance (1,000,000 Documents) & Concurrency Analysis
 
-For the large dataset, we tested performance across three different concurrency levels (1, 10, and 100 clients) to understand how each system scales under load.
+For the large dataset, we tested performance across three different concurrency levels (1, 10, and 50 clients) to understand how each system scales under load.
 
 #### Performance Comparison by Concurrency
 
-| Metric | 1 Client (PG vs ES) | 10 Clients (PG vs ES) | 100 Clients (PG vs ES) |
+| Metric | 1 Client (PG vs ES) | 10 Clients (PG vs ES) | 50 Clients (PG vs ES) |
 | :--- | :--- | :--- | :--- |
-| **Avg Throughput (TPS)** | 146 vs **370** | **744** vs 731 | 673 vs **824** |
-| **Indexing Time** | **82.0s** vs 146.7s | **78.3s** vs 137.2s | **79.8s** vs 145.0s |
-| **Database Size** | ~1.97 GB vs ~2.06 GB | ~1.97 GB vs **~1.00 GB** | ~1.97 GB vs ~2.07 GB |
-| **Startup Time** | 16.8s vs **12.9s** | 15.3s vs **12.9s** | 29.3s vs **12.9s** |
+| **Avg Throughput (TPS)** | 173 vs **858** | 1065 vs **1627** | **1542** vs 1500 |
+| **Indexing Time** | **79.7s** vs 126.7s | **79.2s** vs 134.0s | **78.9s** vs 141.3s |
+| **Database Size** | ~1.97 GB vs **~1.00 GB** | ~1.97 GB vs **~1.00 GB** | ~1.97 GB vs **~1.00 GB** |
+| **Startup Time** | 16.9s vs **12.9s** | 15.9s vs **12.9s** | 15.3s vs **12.9s** |
 
 #### Key Findings
 
-*   **Indexing Speed**: ParadeDB was consistently faster at indexing 1 million documents (~80s) compared to Elasticsearch (~137-147s).
+*   **Indexing Speed**: ParadeDB was consistently faster at indexing 1 million documents (~79s) compared to Elasticsearch (~127-141s).
 *   **Throughput (TPS)**:
-    *   **1 Client**: Elasticsearch was ~2.5x faster.
-    *   **10 Clients**: ParadeDB overtook Elasticsearch, achieving slightly higher throughput (744 TPS vs 731 TPS).
-    *   **100 Clients**: Elasticsearch regained the lead (824 TPS vs 673 TPS), but both systems remained competitive.
-*   **Storage**: ParadeDB's storage footprint was consistent at ~2GB. Elasticsearch's storage footprint varied between ~1GB and ~2GB, likely depending on whether background segment merging had completed.
+    *   **1 Client**: Elasticsearch was ~5x faster (858 TPS vs 173 TPS).
+    *   **10 Clients**: Elasticsearch maintained the lead (1627 TPS vs 1065 TPS).
+    *   **50 Clients**: ParadeDB overtook Elasticsearch (1542 TPS vs 1500 TPS), showing better scalability at higher concurrency.
+*   **Storage**: ParadeDB's storage footprint was consistent at ~1.97GB. Elasticsearch was consistently more efficient at ~1.00GB.
+*   **Resource Usage**: ParadeDB used significantly less memory (~2.7GB) compared to Elasticsearch (~5.1GB) under load.
 
 #### Visualizations
 
 **1 Client Performance**
-![1 Client Performance](plots/large_1_100_performance_comparison.png)
-![1 Client Summary](plots/large_1_100_combined_summary.png)
+![1 Client Performance](plots/large_1_10000_performance_comparison.png)
+![1 Client Summary](plots/large_1_10000_combined_summary.png)
 
 **10 Clients Performance**
-![10 Clients Performance](plots/large_10_100_performance_comparison.png)
-![10 Clients Summary](plots/large_10_100_combined_summary.png)
+![10 Clients Performance](plots/large_10_10000_performance_comparison.png)
+![10 Clients Summary](plots/large_10_10000_combined_summary.png)
 
-**100 Clients Performance**
-![100 Clients Performance](plots/large_100_100_performance_comparison.png)
-![100 Clients Summary](plots/large_100_100_combined_summary.png)
+**50 Clients Performance**
+![50 Clients Performance](plots/large_50_10000_performance_comparison.png)
+![50 Clients Summary](plots/large_50_10000_combined_summary.png)
 
 ---
 
@@ -74,7 +75,7 @@ The benchmarks were conducted using a containerized environment to ensure isolat
         3.  **Complex Query**: Intersection of two distinct terms (e.g., "global" AND "initiative"). Tests boolean AND logic efficiency.
         4.  **Top-N Query**: Single-term search with a limit on results (N=50). Tests ranking and retrieval optimization for paginated views.
         5.  **Boolean Query**: A complex combination of MUST, SHOULD, and NOT clauses (e.g., MUST contain "strategy", SHOULD contain "growth", MUST NOT contain "risk"). Tests the query engine's ability to handle complex logic and filtering.
-    *   **Concurrency**: Tests were run with 1, 10, and 100 concurrent clients to evaluate scalability.
+    *   **Concurrency**: Tests were run with 1, 10, and 50 concurrent clients to evaluate scalability.
 
 ### Metric Definitions and Calculations
 

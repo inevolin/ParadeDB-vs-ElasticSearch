@@ -47,6 +47,8 @@ usage() {
     echo "                             Default: from config"
     echo "  --jvm-opts OPTS            JVM options for Elasticsearch (e.g., '-Xms2g -Xmx4g')"
     echo "                             Default: from config"
+    echo "  -c, --concurrency NUM      Concurrency level for benchmarks"
+    echo "                             Default: from config"
     echo "  -h, --help                 Show this help message"
     echo ""
     echo "EXAMPLES:"
@@ -291,7 +293,7 @@ setup_database() {
         local STARTUP_TIME=$(python3 scripts/timing.py $DEPLOYMENT_END $DEPLOYMENT_START)
 
         # Save startup time to results directory
-        echo "Startup time: ${STARTUP_TIME}s" > "$RESULTS_DIR/${SCALE}_${db}_startup_time.txt"
+        echo "Startup time: ${STARTUP_TIME}s" > "$RESULTS_DIR/${SCALE}_${CONCURRENCY}_${TRANSACTIONS}_${db}_startup_time.txt"
         print_info "$db startup time: ${STARTUP_TIME}s"
 
         print_success "$db deployment completed"
@@ -320,7 +322,7 @@ run_benchmark() {
         local db_pod_label="app=$db"
         print_info "Starting resource monitoring for $db..."
         
-        python3 scripts/monitor_resources.py --label "$db_pod_label" --output "$RESULTS_DIR/${SCALE}_${db}_resources.csv" --interval 0.5 &
+        python3 scripts/monitor_resources.py --label "$db_pod_label" --output "$RESULTS_DIR/${SCALE}_${CONCURRENCY}_${TRANSACTIONS}_${db}_resources.csv" --interval 0.5 &
         monitor_pid=$!
         disown $monitor_pid
 
@@ -338,7 +340,7 @@ run_benchmark() {
         fi
         
         # Copy results back
-        kubectl cp $runner_pod:/tmp/results.json "$RESULTS_DIR/${SCALE}_${db}_results.json" || true
+        kubectl cp $runner_pod:/tmp/results.json "$RESULTS_DIR/${SCALE}_${CONCURRENCY}_${TRANSACTIONS}_${db}_results.json" || true
         
         # Stop monitoring
         if [[ -n "$monitor_pid" ]]; then
@@ -361,7 +363,7 @@ generate_plots() {
     fi
 
     # Call Python script to generate plots
-    python3 generate_plots.py "${DATABASES[@]}" "$SCALE"
+    python3 generate_plots.py --databases "${DATABASES[@]}" --scale "$SCALE" --concurrency "$CONCURRENCY" --transactions "$TRANSACTIONS" --results-dir "$RESULTS_DIR" --plots-dir "$PLOTS_DIR"
 
     print_success "Plot generation completed"
 }
@@ -394,6 +396,10 @@ while [[ $# -gt 0 ]]; do
             JVM_OPTS="$2"
             shift 2
             ;;
+        -c|--concurrency)
+            CONCURRENCY="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
@@ -424,6 +430,12 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
+# Validate concurrency
+if [[ ! "$CONCURRENCY" =~ ^[0-9]+$ ]] || [[ "$CONCURRENCY" -lt 1 ]]; then
+    print_error "Invalid concurrency: $CONCURRENCY. Must be a positive integer."
+    exit 1
+fi
+
 # Validate resource formats
 validate_resource() {
     local value=$1
@@ -450,6 +462,7 @@ print_info "Configuration:"
 print_info "  Databases: ${DATABASES[*]}"
 print_info "  Scale: $SCALE"
 print_info "  Transactions: $TRANSACTIONS"
+print_info "  Concurrency: $CONCURRENCY"
 print_info "  Config: $CONFIG_FILE"
 print_info "  Resources: CPU=${CPU}, Memory=${MEMORY}, JVM_OPTS=${JVM_OPTS}"
 echo

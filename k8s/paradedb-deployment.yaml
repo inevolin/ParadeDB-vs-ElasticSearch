@@ -63,6 +63,8 @@ spec:
           - "max_parallel_workers=8"
           - "-c"
           - "max_parallel_workers_per_gather=4"
+          - "-c"
+          - "max_connections=300"
         ports:
         - containerPort: 5432
           name: postgres

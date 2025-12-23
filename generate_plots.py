@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import csv
+import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
@@ -73,7 +74,7 @@ def parse_time_file(filepath):
         pass
     return None
 
-def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''):
+def generate_plots(databases, results_dir='results', plots_dir='plots', scale='', concurrency='', transactions=''):
     """Generate performance comparison plots"""
 
     # Ensure plots directory exists
@@ -98,12 +99,17 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
 
     # Collect startup times
     for db in databases:
-        startup_file = os.path.join(results_dir, f'{scale}_{db}_startup_time.txt')
+        startup_file = os.path.join(results_dir, f'{scale}_{concurrency}_{transactions}_{db}_startup_time.txt')
+        if not os.path.exists(startup_file):
+             startup_file = os.path.join(results_dir, f'{scale}_{db}_startup_time.txt')
         startup_times[db] = parse_startup_file(startup_file)
 
     # Collect metrics from JSON or fallback to text files
     for db in databases:
-        json_file = os.path.join(results_dir, f'{scale}_{db}_results.json')
+        json_file = os.path.join(results_dir, f'{scale}_{concurrency}_{transactions}_{db}_results.json')
+        if not os.path.exists(json_file):
+             json_file = os.path.join(results_dir, f'{scale}_{db}_results.json')
+             
         if os.path.exists(json_file):
             try:
                 with open(json_file, 'r') as f:
@@ -126,7 +132,10 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
                 print(f"Error parsing JSON for {db}: {e}")
         
         # Collect resource usage
-        resource_file = os.path.join(results_dir, f'{scale}_{db}_resources.csv')
+        resource_file = os.path.join(results_dir, f'{scale}_{concurrency}_{transactions}_{db}_resources.csv')
+        if not os.path.exists(resource_file):
+             resource_file = os.path.join(results_dir, f'{scale}_{db}_resources.csv')
+             
         if os.path.exists(resource_file):
             try:
                 with open(resource_file, 'r') as f:
@@ -367,7 +376,7 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
     plt.tight_layout()
 
     # Save plot
-    plot_file = os.path.join(plots_dir, f'{scale}_performance_comparison.png' if scale else 'performance_comparison.png')
+    plot_file = os.path.join(plots_dir, f'{scale}_{concurrency}_{transactions}_performance_comparison.png')
     plt.savefig(plot_file, dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -414,7 +423,7 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
                 fontsize=12, color='gray')
 
     plt.tight_layout()
-    # agg_plot_file = os.path.join(plots_dir, f'{scale}_aggregated_performance_time.png' if scale else 'aggregated_performance_time.png')
+    # agg_plot_file = os.path.join(plots_dir, f'{scale}_{concurrency}_{transactions}_aggregated_performance_time.png')
     # plt.savefig(agg_plot_file, dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -458,7 +467,7 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
                 fontsize=12, color='gray')
 
     plt.tight_layout()
-    # agg_tps_plot_file = os.path.join(plots_dir, f'{scale}_aggregated_performance_tps.png' if scale else 'aggregated_performance_tps.png')
+    # agg_tps_plot_file = os.path.join(plots_dir, f'{scale}_{concurrency}_{transactions}_aggregated_performance_tps.png')
     # plt.savefig(agg_tps_plot_file, dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -489,7 +498,7 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
     #             fontsize=12, color='gray')
     
     # plt.tight_layout()
-    # size_plot_file = os.path.join(plots_dir, f'{scale}_database_size_comparison.png' if scale else 'database_size_comparison.png')
+    # size_plot_file = os.path.join(plots_dir, f'{scale}_{concurrency}_{transactions}_database_size_comparison.png')
     # plt.savefig(size_plot_file, dpi=300, bbox_inches='tight')
     # plt.close()
     # print(f"Database size plot saved to: {size_plot_file}")
@@ -518,7 +527,7 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
         ax5_mem.grid(True, alpha=0.3)
         
         plt.tight_layout()
-        # resource_plot_file = os.path.join(plots_dir, f'{scale}_resource_usage.png' if scale else 'resource_usage.png')
+        # resource_plot_file = os.path.join(plots_dir, f'{scale}_{concurrency}_{transactions}_resource_usage.png')
         # plt.savefig(resource_plot_file, dpi=300, bbox_inches='tight')
         plt.close()
         # print(f"Resource usage plot saved to: {resource_plot_file}")
@@ -633,13 +642,13 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
         ax_c4_mem.axis('off')
 
     plt.tight_layout()
-    combined_plot_file = os.path.join(plots_dir, f'{scale}_combined_summary.png' if scale else 'combined_summary.png')
+    combined_plot_file = os.path.join(plots_dir, f'{scale}_{concurrency}_{transactions}_combined_summary.png')
     plt.savefig(combined_plot_file, dpi=300, bbox_inches='tight')
     plt.close()
     print(f"Combined summary plot saved to: {combined_plot_file}")
 
     # Generate summary text file
-    summary_file = os.path.join(plots_dir, f'{scale}_performance_summary.txt' if scale else 'performance_summary.txt')
+    summary_file = os.path.join(plots_dir, f'{scale}_{concurrency}_{transactions}_performance_summary.txt')
     with open(summary_file, 'w') as f:
         f.write("# Performance Comparison Summary\n\n")
 
@@ -742,27 +751,19 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
     print(f"Summary text saved to: {summary_file}")
 
 def main():
-    # Get databases and scale from command line arguments or environment
-    if len(sys.argv) > 1:
-        databases = sys.argv[1:-1] if len(sys.argv) > 2 else sys.argv[1:]
-        scale = sys.argv[-1] if len(sys.argv) > 2 else ''
-    else:
-        # Try to get from environment variable
-        databases_env = os.environ.get('DATABASES', 'paradedb elasticsearch')
-        databases = databases_env.split()
-        scale = ''
+    parser = argparse.ArgumentParser(description='Generate performance comparison plots')
+    parser.add_argument('--databases', nargs='+', required=True, help='List of databases to compare')
+    parser.add_argument('--scale', required=True, help='Data scale (small, medium, large)')
+    parser.add_argument('--concurrency', required=True, help='Concurrency level')
+    parser.add_argument('--transactions', required=True, help='Number of transactions')
+    parser.add_argument('--results-dir', required=True, help='Directory containing results')
+    parser.add_argument('--plots-dir', required=True, help='Directory to save plots')
 
-    # Default scale to 'small' if empty
-    if not scale:
-        scale = 'small'
+    args = parser.parse_args()
 
-    print(f"Generating plots for databases: {databases}, scale: {scale}")
+    print(f"Generating plots for databases: {args.databases}, scale: {args.scale}, concurrency: {args.concurrency}, transactions: {args.transactions}")
 
-    # Use current directory structure
-    results_dir = 'results'
-    plots_dir = 'plots'
-
-    generate_plots(databases, results_dir, plots_dir, scale)
+    generate_plots(args.databases, args.results_dir, args.plots_dir, args.scale, args.concurrency, args.transactions)
 
 if __name__ == '__main__':
     main()

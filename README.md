@@ -7,7 +7,7 @@ This project benchmarks the full-text search performance of **ParadeDB** (Postgr
 Based on the latest benchmark runs, we observed distinct performance profiles for each system:
 
 *   **Large Datasets (1M documents)**: **Elasticsearch** maintained higher query throughput (TPS) at 1 and 100 concurrent clients, but **ParadeDB** outperformed Elasticsearch at 10 concurrent clients.
-*   **Storage Efficiency**: Elasticsearch generally used less disk space (~1GB) compared to ParadeDB (~2GB) for the large dataset, though one run showed higher usage for Elasticsearch likely due to pending merges.
+*   **Storage Efficiency**: Elasticsearch storage usage varied between ~1GB and ~2GB depending on segment merging, while ParadeDB consistently used ~2GB.
 *   **Operational Overhead**: Elasticsearch consistently showed faster startup times, while ParadeDB (running as a PG extension) required slightly more time to become ready.
 
 ## 📈 Detailed Results
@@ -20,33 +20,33 @@ For the large dataset, we tested performance across three different concurrency 
 
 | Metric | 1 Client (PG vs ES) | 10 Clients (PG vs ES) | 100 Clients (PG vs ES) |
 | :--- | :--- | :--- | :--- |
-| **Avg Throughput (TPS)** | 157 vs **361** | **708** vs 691 | 608 vs **680** |
-| **Indexing Time** | **79.8s** vs 132.0s | **78.4s** vs 171.2s | **79.5s** vs 130.1s |
-| **Database Size** | ~1.97 GB vs **~1.00 GB** | ~1.97 GB vs ~2.42 GB | ~1.97 GB vs **~1.00 GB** |
-| **Startup Time** | 16.5s vs **12.9s** | 15.0s vs **14.0s** | 14.2s vs **12.8s** |
+| **Avg Throughput (TPS)** | 146 vs **370** | **744** vs 731 | 673 vs **824** |
+| **Indexing Time** | **82.0s** vs 146.7s | **78.3s** vs 137.2s | **79.8s** vs 145.0s |
+| **Database Size** | ~1.97 GB vs ~2.06 GB | ~1.97 GB vs **~1.00 GB** | ~1.97 GB vs ~2.07 GB |
+| **Startup Time** | 16.8s vs **12.9s** | 15.3s vs **12.9s** | 29.3s vs **12.9s** |
 
 #### Key Findings
 
-*   **Indexing Speed**: ParadeDB was consistently faster at indexing 1 million documents (~80s) compared to Elasticsearch (~130-170s).
+*   **Indexing Speed**: ParadeDB was consistently faster at indexing 1 million documents (~80s) compared to Elasticsearch (~137-147s).
 *   **Throughput (TPS)**:
-    *   **1 Client**: Elasticsearch was ~2.3x faster.
-    *   **10 Clients**: ParadeDB overtook Elasticsearch, achieving slightly higher throughput (708 TPS vs 691 TPS).
-    *   **100 Clients**: Elasticsearch regained the lead (680 TPS vs 608 TPS), but both systems remained competitive.
-*   **Storage**: ParadeDB's storage footprint (~2GB) was generally larger than Elasticsearch's (~1GB). ParadeDB stores the full raw text data in PostgreSQL tables plus search indexes, while Elasticsearch maintains compressed inverted indexes. Note: The 10-client Elasticsearch run showed larger size (~2.4GB), likely due to unmerged segments at the time of measurement.
+    *   **1 Client**: Elasticsearch was ~2.5x faster.
+    *   **10 Clients**: ParadeDB overtook Elasticsearch, achieving slightly higher throughput (744 TPS vs 731 TPS).
+    *   **100 Clients**: Elasticsearch regained the lead (824 TPS vs 673 TPS), but both systems remained competitive.
+*   **Storage**: ParadeDB's storage footprint was consistent at ~2GB. Elasticsearch's storage footprint varied between ~1GB and ~2GB, likely depending on whether background segment merging had completed.
 
 #### Visualizations
 
 **1 Client Performance**
-![1 Client Performance](plots_1clients/large_performance_comparison.png)
-![1 Client Summary](plots_1clients/large_combined_summary.png)
+![1 Client Performance](plots/large_1_100_performance_comparison.png)
+![1 Client Summary](plots/large_1_100_combined_summary.png)
 
 **10 Clients Performance**
-![10 Clients Performance](plots_10clients/large_performance_comparison.png)
-![10 Clients Summary](plots_10clients/large_combined_summary.png)
+![10 Clients Performance](plots/large_10_100_performance_comparison.png)
+![10 Clients Summary](plots/large_10_100_combined_summary.png)
 
 **100 Clients Performance**
-![100 Clients Performance](plots_100clients/large_performance_comparison.png)
-![100 Clients Summary](plots_100clients/large_combined_summary.png)
+![100 Clients Performance](plots/large_100_100_performance_comparison.png)
+![100 Clients Summary](plots/large_100_100_combined_summary.png)
 
 ---
 
@@ -90,6 +90,20 @@ The benchmarks were conducted using a containerized environment to ensure isolat
 *   **Resource Monitoring**:
     *   Real-time resource usage (CPU & Memory) is captured using `docker stats` (since `kubectl top` was not available in the local environment) to ensure accurate measurement of container overhead.
 
+## 📂 Project Structure
+
+```
+├── config/                 # Benchmark configuration
+├── data/                   # Generated synthetic data
+├── k8s/                    # Kubernetes deployment manifests
+├── plots/                  # Generated performance plots and summaries
+├── results/                # Raw benchmark results (JSON, CSV)
+├── scripts/                # Python scripts for benchmarking and monitoring
+├── generate_plots.py       # Plot generation script
+├── run_tests.sh            # Main benchmark runner script
+└── requirements.txt        # Python dependencies
+```
+
 ## 🛠️ How to Reproduce
 
 To run these benchmarks yourself and verify the results:
@@ -102,7 +116,7 @@ To run these benchmarks yourself and verify the results:
     ./run_tests.sh -s large
     ```
 4.  **View Results**:
-    *   Summaries are generated in `plots_1clients/`, `plots_10clients/`, and `plots_100clients/`.
-    *   Raw timing logs are in `results_1clients/`, `results_10clients/`, and `results_100clients/`.
+    *   Summaries and plots are generated in the `plots/` directory.
+    *   Raw timing logs and resource usage data are in the `results/` directory.
     *   Configuration can be tweaked in `config/benchmark_config.json`.
 

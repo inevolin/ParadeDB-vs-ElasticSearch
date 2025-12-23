@@ -56,15 +56,17 @@ spec:
           - "-c"
           - "work_mem=64MB"
           - "-c"
-          - "maintenance_work_mem=512MB"
+          - "maintenance_work_mem=1GB"
           - "-c"
-          - "max_worker_processes=8"
+          - "max_worker_processes=76"
           - "-c"
-          - "max_parallel_workers=8"
+          - "max_parallel_workers=64"
           - "-c"
           - "max_parallel_workers_per_gather=4"
           - "-c"
           - "max_connections=300"
+          - "-c"
+          - "max_parallel_maintenance_workers=8"
         ports:
         - containerPort: 5432
           name: postgres

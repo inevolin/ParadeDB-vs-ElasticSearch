@@ -242,6 +242,23 @@ def create_index(host, port, user, password, db_name):
             WITH (key_field='id');
         """)
 
+        # Wait for index creation to complete
+        print("Waiting for index creation to complete...")
+        while True:
+            cursor.execute("SELECT blocks_done, blocks_total FROM pg_stat_progress_create_index WHERE pid = pg_backend_pid();")
+            result = cursor.fetchone()
+            if result is None:
+                print("Index creation completed.")
+                break
+            blocks_done, blocks_total = result
+            if blocks_done == blocks_total:
+                print("Index creation completed.")
+                break
+            else:
+                progress = (blocks_done / blocks_total) * 100 if blocks_total > 0 else 0
+                print(f"Index creation progress: {progress:.2f}% ({blocks_done}/{blocks_total})")
+            time.sleep(1)
+
         conn.commit()
         
         # Optimize table statistics
@@ -250,6 +267,16 @@ def create_index(host, port, user, password, db_name):
         conn.set_isolation_level(0) # ISOLATION_LEVEL_AUTOCOMMIT
         cursor.execute("VACUUM ANALYZE documents;")
         conn.set_isolation_level(old_isolation_level)
+
+        # Wait for VACUUM ANALYZE to complete
+        print("Waiting for VACUUM ANALYZE to complete...")
+        while True:
+            cursor.execute("SELECT COUNT(*) FROM pg_stat_progress_vacuum;")
+            count = cursor.fetchone()[0]
+            if count == 0:
+                print("VACUUM ANALYZE completed.")
+                break
+            time.sleep(1)
         
         end_time = time.perf_counter()
         index_time = end_time - start_time

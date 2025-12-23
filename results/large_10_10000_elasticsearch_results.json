@@ -1,0 +1,34 @@
+{
+  "database": "elasticsearch",
+  "scale": "large",
+  "metrics": {
+    "data_loading_time": 133.842432,
+    "index_creation_time": 0.142632,
+    "database_size_bytes": 1048247650,
+    "query_1": {
+      "average_latency": 0.006914090085071802,
+      "total_time": 6.975713794003241,
+      "tps": 1433.545052922989
+    },
+    "query_2": {
+      "average_latency": 0.005325552494886506,
+      "total_time": 5.401133961000596,
+      "tps": 1851.463057981149
+    },
+    "query_3": {
+      "average_latency": 0.00593311474769871,
+      "total_time": 5.993548794998787,
+      "tps": 1668.460596891165
+    },
+    "query_4": {
+      "average_latency": 0.00606709739974176,
+      "total_time": 6.113071418993059,
+      "tps": 1635.8388958012852
+    },
+    "query_5": {
+      "average_latency": 0.006423926438846684,
+      "total_time": 6.47887700299907,
+      "tps": 1543.4773642671412
+    }
+  }
+}

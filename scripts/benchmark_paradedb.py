@@ -269,20 +269,14 @@ def create_index(host, port, user, password, db_name):
         if conn:
             conn.close()
 
-def run_single_query(conn_pool, db_name, query_sql):
+def run_single_query(cursor, query_sql):
     """Run a single query and return execution time"""
-    conn = conn_pool.getconn()
-    try:
-        cursor = conn.cursor()
+    start_time = time.perf_counter()
+    cursor.execute(query_sql)
+    results = cursor.fetchall()
+    end_time = time.perf_counter()
 
-        start_time = time.perf_counter()
-        cursor.execute(query_sql)
-        results = cursor.fetchall()
-        end_time = time.perf_counter()
-
-        return end_time - start_time, len(results)
-    finally:
-        conn_pool.putconn(conn)
+    return end_time - start_time, len(results)
 
 def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurrency, quiet=False):
     """Run queries concurrently"""
@@ -340,36 +334,43 @@ def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurr
         worker_time = 0
         worker_transactions = 0
 
-        start_idx = (worker_id - 1) * transactions_per_worker + 1
-        end_idx = min(worker_id * transactions_per_worker, transactions)
+        conn = conn_pool.getconn()
+        try:
+            cursor = conn.cursor()
 
-        for i in range(start_idx, end_idx + 1):
-            if query_type == 3:
-                term1_idx = (i - 1) % len(config['term1s'])
-                term2_idx = (i - 1) % len(config['term2s'])
-                term1 = config['term1s'][term1_idx]
-                term2 = config['term2s'][term2_idx]
-                query_sql = config['query_template'](term1, term2)
-            elif query_type == 4:
-                term_idx = (i - 1) % len(config['terms'])
-                term = config['terms'][term_idx]
-                query_sql = config['query_template'](term, config['n'])
-            elif query_type == 5:
-                must_idx = (i - 1) % len(config['must_terms'])
-                should_idx = (i - 1) % len(config['should_terms'])
-                not_idx = (i - 1) % len(config['not_terms'])
-                must = config['must_terms'][must_idx]
-                should = config['should_terms'][should_idx]
-                not_term = config['not_terms'][not_idx]
-                query_sql = config['query_template'](must, should, not_term)
-            else:
-                term_idx = (i - 1) % len(config['terms'])
-                term = config['terms'][term_idx]
-                query_sql = config['query_template'](term)
+            start_idx = (worker_id - 1) * transactions_per_worker + 1
+            end_idx = min(worker_id * transactions_per_worker, transactions)
 
-            query_time, result_count = run_single_query(conn_pool, db_name, query_sql)
-            worker_time += query_time
-            worker_transactions += 1
+            for i in range(start_idx, end_idx + 1):
+                if query_type == 3:
+                    term1_idx = (i - 1) % len(config['term1s'])
+                    term2_idx = (i - 1) % len(config['term2s'])
+                    term1 = config['term1s'][term1_idx]
+                    term2 = config['term2s'][term2_idx]
+                    query_sql = config['query_template'](term1, term2)
+                elif query_type == 4:
+                    term_idx = (i - 1) % len(config['terms'])
+                    term = config['terms'][term_idx]
+                    query_sql = config['query_template'](term, config['n'])
+                elif query_type == 5:
+                    must_idx = (i - 1) % len(config['must_terms'])
+                    should_idx = (i - 1) % len(config['should_terms'])
+                    not_idx = (i - 1) % len(config['not_terms'])
+                    must = config['must_terms'][must_idx]
+                    should = config['should_terms'][should_idx]
+                    not_term = config['not_terms'][not_idx]
+                    query_sql = config['query_template'](must, should, not_term)
+                else:
+                    term_idx = (i - 1) % len(config['terms'])
+                    term = config['terms'][term_idx]
+                    query_sql = config['query_template'](term)
+
+                query_time, result_count = run_single_query(cursor, query_sql)
+                worker_time += query_time
+                worker_transactions += 1
+        finally:
+            cursor.close()
+            conn_pool.putconn(conn)
 
         return worker_time, worker_transactions
 
@@ -445,7 +446,7 @@ def main():
         for query_type in [1, 2, 3, 4, 5]:
             run_concurrent_queries(
                 benchmark_pool, args.dbname, query_type,
-                transactions=max(1, args.transactions // 10),
+                transactions=10, # Fixed small number for warmup
                 concurrency=args.concurrency,
                 quiet=True
             )

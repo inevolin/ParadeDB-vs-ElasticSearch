@@ -76,7 +76,22 @@ The benchmarks were conducted using a containerized environment to ensure isolat
         5.  **Boolean Query**: A complex combination of MUST, SHOULD, and NOT clauses (e.g., MUST contain "strategy", SHOULD contain "growth", MUST NOT contain "risk"). Tests the query engine's ability to handle complex logic and filtering.
     *   **Concurrency**: Tests were run with 1, 10, and 100 concurrent clients to evaluate scalability.
 
-## ⚙️ Technical Implementation Details
+### Metric Definitions and Calculations
+
+The benchmark measures several key performance metrics:
+
+*   **Iterations (Transactions)**: The total number of queries executed for each query type. This represents the workload volume.
+*   **Concurrency**: The number of simultaneous client threads executing queries in parallel. Higher concurrency simulates more users.
+*   **Average Query Latency**: The average time taken per individual query, calculated as the total execution time across all workers divided by the total number of transactions. This metric represents the response time experienced by clients.
+*   **TPS (Transactions Per Second)**: The throughput metric, calculated as total transactions divided by the wall time. This shows how many queries the system can process per second under the given concurrency.
+*   **Wall Time**: The total elapsed time from the start to the end of the benchmark run for a specific query type and concurrency level.
+
+**Relationships and Computations**:
+- TPS = Total Transactions / Wall Time
+- Average Latency = (Sum of individual worker execution times) / Total Transactions
+- Wall Time is measured across concurrent execution, so it represents the time until the last worker completes
+- Higher concurrency typically reduces wall time but may increase average latency due to resource contention
+- Iterations determine the statistical significance; more iterations provide more reliable average latency measurements
 
 *   **Data Generation**:
     *   Synthetic data is generated using real English words (sourced from `dwyl/english-words`) to ensure realistic term frequency and distribution, rather than random character strings.

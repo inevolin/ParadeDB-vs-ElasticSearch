@@ -459,7 +459,7 @@ def main():
     for query_type in [1, 2, 3, 4, 5]:
         run_concurrent_queries(
             session, es_host, es_port, index_name, query_type,
-            transactions=max(1, transactions // 10),
+            transactions=10, # Warmup with 10 transactions
             concurrency=concurrency,
             quiet=True
         )

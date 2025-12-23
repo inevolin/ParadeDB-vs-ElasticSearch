@@ -49,6 +49,8 @@ usage() {
     echo "                             Default: from config"
     echo "  -c, --concurrency NUM      Concurrency level for benchmarks"
     echo "                             Default: from config"
+    echo "  -t, --transactions NUM     Number of transactions for benchmarks"
+    echo "                             Default: from config"
     echo "  -h, --help                 Show this help message"
     echo ""
     echo "EXAMPLES:"
@@ -400,6 +402,10 @@ while [[ $# -gt 0 ]]; do
             CONCURRENCY="$2"
             shift 2
             ;;
+        -t|--transactions)
+            TRANSACTIONS="$2"
+            shift 2
+            ;;
         -h|--help)
             usage
             exit 0
@@ -436,6 +442,12 @@ if [[ ! "$CONCURRENCY" =~ ^[0-9]+$ ]] || [[ "$CONCURRENCY" -lt 1 ]]; then
     exit 1
 fi
 
+# Validate transactions
+if [[ ! "$TRANSACTIONS" =~ ^[0-9]+$ ]] || [[ "$TRANSACTIONS" -lt 1 ]]; then
+    print_error "Invalid transactions: $TRANSACTIONS. Must be a positive integer."
+    exit 1
+fi
+
 # Validate resource formats
 validate_resource() {
     local value=$1
@@ -467,6 +479,7 @@ print_info "  Config: $CONFIG_FILE"
 print_info "  Resources: CPU=${CPU}, Memory=${MEMORY}, JVM_OPTS=${JVM_OPTS}"
 echo
 
+delete_deployments
 cleanup_database_data
 check_prerequisites
 generate_data_on_host

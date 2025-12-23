@@ -50,7 +50,7 @@ spec:
         image: paradedb/paradedb:latest
         args:
           - "-c"
-          - "shared_buffers=4GB"
+          - "shared_buffers=3GB"
           - "-c"
           - "effective_cache_size=6GB"
           - "-c"

@@ -18,6 +18,8 @@ For the large dataset, we tested performance across three different concurrency 
 
 #### Performance Comparison by Concurrency
 
+*Note: These results are based on 10,000 transactions per query type.*
+
 | Metric | 1 Client (PG vs ES) | 10 Clients (PG vs ES) | 50 Clients (PG vs ES) |
 | :--- | :--- | :--- | :--- |
 | **Avg Throughput (TPS)** | 173 vs **858** | 1065 vs **1627** | **1542** vs 1500 |

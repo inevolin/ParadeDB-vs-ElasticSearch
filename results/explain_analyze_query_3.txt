@@ -1,0 +1,17 @@
+Query: SELECT id, title FROM documents WHERE documents @@@ 'content:global OR content:initiative' ORDER BY paradedb.score(documents) DESC LIMIT 20;
+
+EXPLAIN ANALYZE Output:
+Limit  (cost=10.00..10.01 rows=1 width=60) (actual time=0.124..0.125 rows=0 loops=1)
+  ->  Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.01 rows=1 width=60) (actual time=0.124..0.124 rows=0 loops=1)
+        Table: documents
+        Index: documents_search_idx
+        Segment Count: 1
+        Heap Fetches: 0
+        Exec Method: TopNScanExecState
+        Scores: true
+           TopN Order By: pdb.score() desc
+           TopN Limit: 20
+           Queries: 1
+        Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:global OR content:initiative","lenient":null,"conjunction_mode":null}}}}
+Planning Time: 0.343 ms
+Execution Time: 0.171 ms

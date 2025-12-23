@@ -430,6 +430,96 @@ def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurr
 
     return avg_latency, wall_time
 
+def run_explain_analyze(conn_pool, query_type):
+    """Run EXPLAIN ANALYZE for a single query of the given type and save output"""
+    print(f"Running EXPLAIN ANALYZE for Query {query_type}...")
+    
+    # Load config
+    config_file = '/config/benchmark_config.json'
+    with open(config_file, 'r') as f:
+        benchmark_config = json.load(f)
+    
+    queries_config = benchmark_config['queries']
+
+    # Query configurations
+    query_configs = {
+        1: {
+            'name': 'Simple Search',
+            'terms': queries_config['simple']['terms'],
+            'query_template': lambda term: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{term}' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
+        },
+        2: {
+            'name': 'Phrase Search',
+            'terms': queries_config['phrase']['terms'],
+            'query_template': lambda phrase: f"SELECT id, title FROM documents WHERE documents @@@ 'content:\"{phrase}\"' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
+        },
+        3: {
+            'name': 'Complex Query',
+            'term1s': queries_config['complex']['term1s'],
+            'term2s': queries_config['complex']['term2s'],
+            'query_template': lambda term1, term2: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{term1} OR content:{term2}' ORDER BY paradedb.score(documents) DESC LIMIT 20;"
+        },
+        4: {
+            'name': 'Top-N Query',
+            'terms': queries_config['top_n']['terms'],
+            'n': queries_config['top_n']['n'],
+            'query_template': lambda term, n: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{term}' ORDER BY paradedb.score(documents) DESC LIMIT {n};"
+        },
+        5: {
+            'name': 'Boolean Query',
+            'must_terms': queries_config['boolean']['must_terms'],
+            'should_terms': queries_config['boolean']['should_terms'],
+            'not_terms': queries_config['boolean']['not_terms'],
+            'query_template': lambda must, should, not_term: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{must} AND (content:{should}) AND NOT content:{not_term}' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
+        }
+    }
+
+    config = query_configs[query_type]
+    
+    # Generate one query
+    query_sql = ""
+    if query_type == 3:
+        term1 = config['term1s'][0]
+        term2 = config['term2s'][0]
+        query_sql = config['query_template'](term1, term2)
+    elif query_type == 4:
+        term = config['terms'][0]
+        query_sql = config['query_template'](term, config['n'])
+    elif query_type == 5:
+        must = config['must_terms'][0]
+        should = config['should_terms'][0]
+        not_term = config['not_terms'][0]
+        query_sql = config['query_template'](must, should, not_term)
+    else:
+        term = config['terms'][0]
+        query_sql = config['query_template'](term)
+        
+    explain_sql = f"EXPLAIN ANALYZE {query_sql}"
+    
+    conn = conn_pool.getconn()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(explain_sql)
+        results = cursor.fetchall()
+        
+        output_file = f'/results/explain_analyze_query_{query_type}.txt'
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        
+        with open(output_file, 'w') as f:
+            f.write(f"Query: {query_sql}\n\n")
+            f.write("EXPLAIN ANALYZE Output:\n")
+            for row in results:
+                f.write(f"{row[0]}\n")
+                
+        print(f"Saved EXPLAIN ANALYZE output to {output_file}")
+        
+    except Exception as e:
+        print(f"Error running EXPLAIN ANALYZE: {e}")
+    finally:
+        cursor.close()
+        conn_pool.putconn(conn)
+
 def main():
     parser = argparse.ArgumentParser(description='ParadeDB Benchmark Script')
     parser.add_argument('-q', '--quiet', action='store_true', help='Run in quiet mode')
@@ -478,6 +568,9 @@ def main():
             
         # Warmup
         for query_type in [1, 2, 3, 4, 5]:
+            # Run EXPLAIN ANALYZE once per query type during warmup
+            run_explain_analyze(benchmark_pool, query_type)
+            
             run_concurrent_queries(
                 benchmark_pool, args.dbname, query_type,
                 transactions=10, # Fixed small number for warmup

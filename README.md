@@ -133,6 +133,7 @@ To run these benchmarks yourself and verify the results:
 4.  **View Results**:
     *   Summaries and plots are generated in the `plots/` directory.
     *   Raw timing logs and resource usage data are in the `results/` directory.
+    *   **Query Plans**: For ParadeDB, `EXPLAIN ANALYZE` output for each query type is saved to `results/explain_analyze_query_X.txt` to assist with performance debugging.
     *   Configuration can be tweaked in `config/benchmark_config.json`.
 
 ### Advanced Usage

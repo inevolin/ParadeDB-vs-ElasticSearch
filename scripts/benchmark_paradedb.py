@@ -278,6 +278,13 @@ def create_index(host, port, user, password, db_name):
                 break
             time.sleep(1)
         
+        # Prewarm the BM25 index
+        print("Prewarming BM25 index...")
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS pg_prewarm;")
+        cursor.execute("SELECT pg_prewarm('documents_search_idx');")
+        blocks_loaded = cursor.fetchone()[0]
+        print(f"Index prewarm completed, {blocks_loaded} blocks loaded into buffer cache.")
+        
         end_time = time.perf_counter()
         index_time = end_time - start_time
         print("Search index created")

@@ -103,7 +103,7 @@ def verify_postgres_settings(host, port, user, password):
 
         # Query current settings
         cursor.execute("""
-            SELECT name, setting
+            SELECT name, current_setting(name)
             FROM pg_settings
             WHERE name IN %s
         """, (tuple(expected_settings.keys()),))

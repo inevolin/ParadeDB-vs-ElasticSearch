@@ -73,6 +73,65 @@ def wait_for_database(host, port, user, password):
     print("Database failed to become ready", file=sys.stderr)
     return False
 
+def verify_postgres_settings(host, port, user, password):
+    """Verify that PostgreSQL configuration parameters are set correctly"""
+    print("Verifying PostgreSQL configuration settings...")
+
+    expected_settings = {
+        'shared_buffers': '3GB',
+        'effective_cache_size': '6GB',
+        'work_mem': '64MB',
+        'maintenance_work_mem': '1GB',
+        'max_worker_processes': '76',
+        'max_parallel_workers': '64',
+        'max_parallel_workers_per_gather': '4',
+        'max_connections': '300',
+        'max_parallel_maintenance_workers': '8'
+    }
+
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=host,
+            port=port,
+            user=user,
+            password=password,
+            dbname='postgres',
+            connect_timeout=10
+        )
+        cursor = conn.cursor()
+
+        # Query current settings
+        cursor.execute("""
+            SELECT name, setting
+            FROM pg_settings
+            WHERE name IN %s
+        """, (tuple(expected_settings.keys()),))
+
+        current_settings = dict(cursor.fetchall())
+
+        # Verify each setting
+        has_mismatches = False
+        for param, expected_value in expected_settings.items():
+            actual_value = current_settings.get(param)
+            if actual_value != expected_value:
+                print(f"⚠️  PostgreSQL parameter '{param}' is set to '{actual_value}', expected '{expected_value}'")
+                has_mismatches = True
+            else:
+                print(f"✓ {param}: {actual_value}")
+
+        if has_mismatches:
+            print("Some PostgreSQL configuration parameters do not match expected values.")
+        else:
+            print("All PostgreSQL configuration parameters verified successfully!")
+
+    except Exception as e:
+        print(f"Failed to verify PostgreSQL settings: {e}", file=sys.stderr)
+        raise
+    finally:
+        if conn:
+            conn.close()
+
 def setup_database(host, port, user, password, db_name):
     """Create database and table"""
     print("Setting up database...")
@@ -538,6 +597,9 @@ def main():
     # Wait for database
     if not wait_for_database(args.host, args.port, args.user, args.password):
         sys.exit(1)
+
+    # Verify PostgreSQL configuration settings
+    verify_postgres_settings(args.host, args.port, args.user, args.password)
 
     # Setup operations using direct connections
     setup_database(args.host, args.port, args.user, args.password, args.dbname)

@@ -1,8 +1,8 @@
 Query: SELECT id, title FROM documents WHERE documents @@@ 'content:project' ORDER BY paradedb.score(documents) DESC LIMIT 10;
 
 EXPLAIN ANALYZE Output:
-Limit  (cost=10.00..10.01 rows=1 width=60) (actual time=0.594..0.602 rows=1 loops=1)
-  ->  Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.01 rows=1 width=60) (actual time=0.593..0.600 rows=1 loops=1)
+Limit  (cost=10.00..10.01 rows=1 width=60) (actual time=0.208..0.215 rows=1 loops=1)
+  ->  Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.01 rows=1 width=60) (actual time=0.207..0.214 rows=1 loops=1)
         Table: documents
         Index: documents_search_idx
         Segment Count: 1
@@ -13,5 +13,5 @@ Limit  (cost=10.00..10.01 rows=1 width=60) (actual time=0.594..0.602 rows=1 loop
            TopN Limit: 10
            Queries: 1
         Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:project","lenient":null,"conjunction_mode":null}}}}
-Planning Time: 1.779 ms
-Execution Time: 0.753 ms
+Planning Time: 1.406 ms
+Execution Time: 0.318 ms

@@ -1,8 +1,8 @@
 Query: SELECT id, title FROM documents WHERE documents @@@ 'content:strategy AND (content:growth) AND NOT content:risk' ORDER BY paradedb.score(documents) DESC LIMIT 10;
 
 EXPLAIN ANALYZE Output:
-Limit  (cost=10.00..10.01 rows=1 width=60) (actual time=0.148..0.149 rows=0 loops=1)
-  ->  Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.01 rows=1 width=60) (actual time=0.147..0.147 rows=0 loops=1)
+Limit  (cost=10.00..10.01 rows=1 width=60) (actual time=0.136..0.137 rows=0 loops=1)
+  ->  Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.01 rows=1 width=60) (actual time=0.135..0.136 rows=0 loops=1)
         Table: documents
         Index: documents_search_idx
         Segment Count: 1
@@ -13,5 +13,5 @@ Limit  (cost=10.00..10.01 rows=1 width=60) (actual time=0.148..0.149 rows=0 loop
            TopN Limit: 10
            Queries: 1
         Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:strategy AND (content:growth) AND NOT content:risk","lenient":null,"conjunction_mode":null}}}}
-Planning Time: 0.452 ms
-Execution Time: 0.201 ms
+Planning Time: 0.469 ms
+Execution Time: 0.186 ms

@@ -24,6 +24,15 @@ Source of truth for query templates:
   - shard/segment count, merge state, caches
   - whether scoring is needed
   - whether it can terminate early (top-K optimizations)
+  - whether it must compute accurate **total hits** (`track_total_hits`)
+
+#### Note on hits tracking (`track_total_hits`)
+
+By default, Elasticsearch may spend extra work to compute an accurate total hit count. Disabling hits tracking (`"track_total_hits": false`) can reduce per-request overhead for search-heavy workloads when the benchmark only needs top-K results.
+
+This repo includes a direct 50-client comparison where hits tracking was disabled in Elasticsearch:
+- Baseline: `plots/large_50_1000_combined_summary.png`
+- Hits tracking disabled: `plots/large_50_1001_combined_summary.png`
 
 ### ParadeDB (Postgres + Tantivy)
 - Uses Postgres for SQL planning/execution and concurrency, and ParadeDB/Tantivy for **BM25** full-text retrieval.

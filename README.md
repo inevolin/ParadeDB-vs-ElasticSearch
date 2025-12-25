@@ -51,6 +51,29 @@ For the large dataset, we tested performance across multiple concurrency levels 
 **50 Clients Summary**
 ![50 Clients Summary](plots/large_50_1000_combined_summary.png)
 
+---
+
+**50 Clients Summary (Elasticsearch hits tracking disabled)**
+
+This run corresponds to `large_50_1001` and was generated with Elasticsearch hits tracking disabled (`track_total_hits: false`). The baseline `large_50_1000` run uses hits tracking enabled (the default behavior / `track_total_hits: true`).
+
+**Observations (hits tracking enabled → disabled)**
+*   **Overall ES throughput increases**: avg TPS (Query 1–6) 837.35 → 908.49 (~+8.5%); total query duration 9.0041s → 8.1981s (~-8.9%).
+*   **Largest wins are in higher-overhead searches**: Query 3 and Query 4 see the biggest gains (~+20.7% and ~+16.3%).
+*   **Not universally beneficial**: Query 2 (phrase) regresses (~-6.8%) in this pair of runs.
+*   **JOIN also improves, but modestly**: Query 6 improves (~+10.1%), suggesting hits tracking isn’t the dominant cost driver there.
+
+Per-query Elasticsearch TPS deltas (`large_50_1000` → `large_50_1001`):
+
+*   **Query 1**: 890.01 → 977.47 TPS (~+9.8%)
+*   **Query 2**: 1189.80 → 1108.40 TPS (~-6.8%)
+*   **Query 3**: 879.97 → 1061.99 TPS (~+20.7%)
+*   **Query 4**: 829.02 → 964.56 TPS (~+16.3%)
+*   **Query 5**: 961.92 → 1037.54 TPS (~+7.9%)
+*   **Query 6**: 273.39 → 300.99 TPS (~+10.1%)
+
+![50 Clients Summary (hits tracking disabled)](plots/large_50_1001_combined_summary.png)
+
 
 ## 🔬 Methodology
 
@@ -236,7 +259,7 @@ The benchmark runner and plot generator use a scale+concurrency+transactions nam
 The committed example artifacts include:
 
 *   `results/large_1_1000_*`, `results/large_10_1000_*`, `results/large_50_1000_*`
-*   `plots/large_1_1000_*`, `plots/large_10_1000_*`, `plots/large_50_1000_*`
+*   `plots/large_1_1000_*`, `plots/large_10_1000_*`, `plots/large_50_1000_*`, `plots/large_50_1001_*`
 
 ## ⚠️ Limitations & Future Work
 

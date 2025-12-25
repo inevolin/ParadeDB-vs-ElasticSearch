@@ -1,0 +1,54 @@
+# Performance Comparison Summary
+
+Startup Times:
+  Paradedb: 15.36s
+  Elasticsearch: 17.84s
+
+Data Loading & Indexing Times:
+  Paradedb: 124.13s
+  Elasticsearch: 305.13s
+
+Database Sizes:
+  Paradedb: 2603.75 MB
+  Elasticsearch: 1591.29 MB
+
+Peak Resource Usage:
+  Paradedb: 4.50 Cores, 3430.40 MiB
+  Elasticsearch: 4.73 Cores, 5032.96 MiB
+
+Query 1: Simple
+  Paradedb: 0.0612s (397.94 TPS)
+  Elasticsearch: 0.0470s (815.93 TPS)
+
+Query 2: Phrases
+  Paradedb: 0.0715s (419.54 TPS)
+  Elasticsearch: 0.0253s (1196.98 TPS)
+
+Query 3: Complex
+  Paradedb: 0.0913s (344.34 TPS)
+  Elasticsearch: 0.0393s (926.06 TPS)
+
+Query 4: Top-N
+  Paradedb: 0.0589s (507.10 TPS)
+  Elasticsearch: 0.0502s (775.96 TPS)
+
+Query 5: Boolean
+  Paradedb: 0.0737s (374.48 TPS)
+  Elasticsearch: 0.0252s (1161.08 TPS)
+
+Query 6: JOINs
+  Paradedb: 0.0447s (538.89 TPS)
+  Elasticsearch: 0.1709s (269.86 TPS)
+
+Total Query Duration:
+  Paradedb: 14.3272s
+  Elasticsearch: 9.0144s
+
+Total Workflow Duration (Setup + Ingest + Query):
+  Paradedb: 153.8169s
+  Elasticsearch: 331.9817s
+
+TPS Summary (Average across queries):
+  Paradedb: 430.38 TPS
+  Elasticsearch: 857.64 TPS
+

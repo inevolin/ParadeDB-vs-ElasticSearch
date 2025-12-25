@@ -20,7 +20,7 @@ For the large dataset, we tested performance across multiple concurrency levels 
 
 *Note: These results are based on 1,000 transactions per query type (Query 1–6).*
 
-| Metric | 1 Client (ParadeDB vs ES) | 10 Clients (ParadeDB vs ES) | 50 Clients (ParadeDB vs ES) |
+| Metrics (ParadeDB vs ES) | 1 Client | 10 Clients | 50 Clients |
 | :--- | :--- | :--- | :--- |
 | **Avg TPS (across Query 1–6)** | 150.96 vs **360.28** | 190.01 vs **843.97** | 444.32 vs **837.35** |
 | **Startup Time** | 16.51s vs **12.76s** | 32.28s vs **12.78s** | **14.15s** vs 18.03s |
@@ -63,6 +63,7 @@ The benchmarks were conducted using a containerized environment to ensure isolat
 *   **Data Storage Differences**: 
     *   **ParadeDB**: Stores full raw text data in PostgreSQL tables (title and content columns) plus creates BM25 search indexes, resulting in larger storage footprint.
     *   **Elasticsearch**: Only maintains compressed inverted indexes and tokenized data optimized for search, resulting in more efficient storage.
+    *   **Why ParadeDB often looks larger in this benchmark**: ParadeDB is a PostgreSQL database, so the measured size includes table heap storage (raw `title`/`content`), MVCC/page overhead, and secondary indexes (the BM25 index on `documents`, plus the btree/GIN indexes on `child_documents`). Elasticsearch’s reported store size is optimized for search workloads and uses compression/segment structures; it does not map 1:1 to Postgres heap+index accounting.
 *   **Workload**:
     *   **Ingestion**: Bulk loading of JSON documents.
     *   **Queries**: The benchmark executes a mix of 6 distinct query types to simulate real-world usage patterns:

@@ -551,13 +551,13 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
         ax_cpu.set_xlabel('Time (s)')
         ax_cpu.set_ylabel('CPU (Cores)')
         ax_cpu.set_title('CPU Usage', fontweight='normal')
-        ax_cpu.legend(loc='upper right')
+        ax_cpu.legend(loc='upper left')
         ax_cpu.grid(True, alpha=0.3)
         
         ax_mem.set_xlabel('Time (s)')
         ax_mem.set_ylabel('Memory (MiB)')
         ax_mem.set_title('Memory Usage', fontweight='normal')
-        ax_mem.legend(loc='upper right')
+        ax_mem.legend(loc='upper left')
         ax_mem.grid(True, alpha=0.3)
     else:
         ax_cpu.text(0.5, 0.5, 'No data available', transform=ax_cpu.transAxes, ha='center', va='center')

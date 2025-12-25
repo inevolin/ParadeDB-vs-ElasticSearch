@@ -13,6 +13,8 @@ import urllib.request
 import gzip
 import tempfile
 import multiprocessing
+import uuid
+import argparse
 
 def download_english_words():
     """Download a comprehensive English word list"""
@@ -197,6 +199,10 @@ def download_english_words():
     print(f"Using {len(words)} fallback words", file=sys.stderr)
     return words
 
+def get_deterministic_uuid(int_id):
+    """Generate a deterministic UUID from an integer ID"""
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, str(int_id)))
+
 def generate_sentence(words, min_words=5, max_words=20):
     """Generate a random sentence using dictionary words"""
     num_words = random.randint(min_words, max_words)
@@ -225,22 +231,43 @@ def generate_document(doc_id, words):
     content = ' '.join(content_sentences)
 
     return {
-        'id': doc_id,
+        'id': get_deterministic_uuid(doc_id),
         'title': title,
         'content': content
     }
 
+def generate_child_document(parent_id_range):
+    """Generate a child document with a reference to a parent"""
+    parent_id = random.randint(1, parent_id_range)
+    return {
+        'id': str(uuid.uuid4()),
+        'parent_id': get_deterministic_uuid(parent_id),
+        'data': {
+            'status': random.choice(['active', 'inactive', 'pending', 'archived']),
+            'priority': random.choice(['high', 'medium', 'low']),
+            'score': round(random.random() * 100, 2),
+            'tags': random.sample(['urgent', 'review', 'legacy', 'new', 'flagged'], k=random.randint(1, 3)),
+            'metadata': {
+                'created_at': f"202{random.randint(0, 4)}-{random.randint(1, 12):02d}-{random.randint(1, 28):02d}",
+                'version': random.randint(1, 10)
+            }
+        }
+    }
+
 def generate_batch(args):
     """Generate a batch of documents in parallel"""
-    start, end, words, seed_offset = args
+    start, end, words, seed_offset, mode, total_parents = args
     random.seed(42 + seed_offset)  # Different seed per process for reproducibility
     docs = []
     for i in range(start, end):
-        doc = generate_document(i + 1, words)
+        if mode == 'child':
+            doc = generate_child_document(total_parents)
+        else:
+            doc = generate_document(i + 1, words)
         docs.append(json.dumps(doc))
     return docs
 
-def generate_dataset(scale, output_file=None, config_file=None):
+def generate_dataset(scale, mode='parent', output_file=None, config_file=None):
     """Generate a complete dataset for the given scale"""
     # Load config
     if config_file is None:
@@ -280,10 +307,12 @@ def generate_dataset(scale, output_file=None, config_file=None):
         expected_size = size_map.get(scale, 100)
         print(f"Config file not found, using fallback size {expected_size} for {scale} scale", file=sys.stderr)
 
-    print(f"Generating {expected_size} synthetic documents for {scale} scale...", file=sys.stderr)
+    print(f"Generating {expected_size} synthetic {mode} documents for {scale} scale...", file=sys.stderr)
 
-    # Get English words
-    words = download_english_words()
+    # Get English words (only needed for parent documents)
+    words = []
+    if mode == 'parent':
+        words = download_english_words()
 
     # Generate documents in parallel batches
     batch_size = 10000
@@ -294,7 +323,7 @@ def generate_dataset(scale, output_file=None, config_file=None):
         seed_offset = 0
         for start in range(0, expected_size, batch_size):
             end = min(start + batch_size, expected_size)
-            tasks.append((start, end, words, seed_offset))
+            tasks.append((start, end, words, seed_offset, mode, expected_size))
             seed_offset += 1
         
         for result in pool.imap(generate_batch, tasks):
@@ -303,20 +332,16 @@ def generate_dataset(scale, output_file=None, config_file=None):
             print(f"Generated {len(result)} more documents...", file=sys.stderr)
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python generate_data.py <scale>")
-        print("Scale can be: small, medium, large")
-        sys.exit(1)
-
-    scale = sys.argv[1].lower()
-    if scale not in ['small', 'medium', 'large']:
-        print("Invalid scale. Must be: small, medium, large")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='Generate synthetic data for benchmarks')
+    parser.add_argument('scale', choices=['small', 'medium', 'large'], help='Data scale')
+    parser.add_argument('--mode', choices=['parent', 'child'], default='parent', help='Type of documents to generate')
+    
+    args = parser.parse_args()
 
     # Set random seed for reproducible results
     random.seed(42)
 
-    generate_dataset(scale)
+    generate_dataset(args.scale, mode=args.mode)
 
 if __name__ == "__main__":
     main()

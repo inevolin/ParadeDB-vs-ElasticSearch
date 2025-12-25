@@ -1,17 +1,20 @@
 Query: SELECT id, title FROM documents WHERE documents @@@ 'content:global OR content:initiative' ORDER BY paradedb.score(documents) DESC LIMIT 20;
 
 EXPLAIN ANALYZE Output:
-Limit  (cost=10.00..10.01 rows=1 width=60) (actual time=0.122..0.122 rows=0 loops=1)
-  ->  Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.01 rows=1 width=60) (actual time=0.121..0.122 rows=0 loops=1)
-        Table: documents
-        Index: documents_search_idx
-        Segment Count: 1
-        Heap Fetches: 0
-        Exec Method: TopNScanExecState
-        Scores: true
-           TopN Order By: pdb.score() desc
-           TopN Limit: 20
-           Queries: 1
-        Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:global OR content:initiative","lenient":null,"conjunction_mode":null}}}}
-Planning Time: 0.304 ms
-Execution Time: 0.161 ms
+Limit  (cost=1010.04..1012.39 rows=20 width=72) (actual time=3.765..5.568 rows=20 loops=1)
+  ->  Gather Merge  (cost=1010.04..1042.51 rows=276 width=72) (actual time=3.764..5.565 rows=20 loops=1)
+        Workers Planned: 3
+        Workers Launched: 3
+        ->  Parallel Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.04 rows=5 width=72) (actual time=1.104..1.169 rows=5 loops=4)
+              Table: documents
+              Index: documents_search_idx
+              Segment Count: 4
+              Heap Fetches: 20
+              Exec Method: TopNScanExecState
+              Scores: true
+                 TopN Order By: pdb.score() desc
+                 TopN Limit: 20
+                 Queries: 1
+              Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:global OR content:initiative","lenient":null,"conjunction_mode":null}}}}
+Planning Time: 0.877 ms
+Execution Time: 5.651 ms

@@ -80,8 +80,8 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
     # Ensure plots directory exists
     Path(plots_dir).mkdir(exist_ok=True)
 
-    queries = ['query1', 'query2', 'query3', 'query4', 'query5']
-    query_labels = ['Simple Search', 'Phrase Search', 'Complex Query', 'Top-N Query', 'Boolean Query']
+    queries = ['query1', 'query2', 'query3', 'query4', 'query5', 'query6']
+    query_labels = ['Simple', 'Phrases', 'Complex', 'Top-N', 'Boolean', 'JOINs']
 
     # Colors for different databases
     colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
@@ -216,171 +216,6 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
             total_times[db] += data_loading_times[db]
         if index_creation_times[db] is not None:
             total_times[db] += index_creation_times[db]
-
-    # Create figure with subplots (3x5: startup + data loading/indexing + total query + query times + TPS)
-    fig, axes = plt.subplots(3, 5, figsize=(25, 15))
-    axes = axes.flatten()
-    fig.suptitle('ParadeDB vs Elasticsearch Performance Comparison (Setup & Query Times)', fontsize=16, fontweight='normal')
-
-    # Hide unused subplots in the first row
-    axes[3].axis('off')
-    axes[4].axis('off')
-
-    # Plot startup times (first row, first plot)
-    ax = axes[0]
-    db_names = []
-    startup_values = []
-    for db in databases:
-        if startup_times[db] is not None:
-            db_names.append(db.title())
-            startup_values.append(startup_times[db])
-
-    if startup_values:
-        bars = ax.bar(range(len(db_names)), startup_values, color=colors[:len(db_names)], alpha=0.7)
-        ax.set_title('Startup Time (seconds)')
-        ax.set_ylabel('Time (s)')
-        ax.set_xticks(range(len(db_names)))
-        ax.set_xticklabels(db_names)
-        for bar, time in zip(bars, startup_values):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, f'{time:.2f}s', 
-                   ha='center', va='bottom', fontsize=10)
-
-    # Plot data loading & indexing times (first row, second plot)
-    ax = axes[1]
-    db_names = []
-    data_loading_values = []
-    for db in databases:
-        value = data_loading_times[db]
-        if index_creation_times[db] is not None:
-            value = (value or 0) + index_creation_times[db]
-        if value is not None:
-            db_names.append(db.title())
-            data_loading_values.append(value)
-
-    if data_loading_values:
-        bars = ax.bar(range(len(db_names)), data_loading_values, color=colors[:len(db_names)], alpha=0.7)
-        ax.set_title('Data Loading & Indexing Time (seconds)')
-        ax.set_ylabel('Time (s)')
-        ax.set_xticks(range(len(db_names)))
-        ax.set_xticklabels(db_names)
-        for bar, time in zip(bars, data_loading_values):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(data_loading_values)*0.02, 
-                   f'{time:.2f}s', ha='center', va='bottom', fontsize=10)
-
-
-    # Plot query times (second row)
-    for i, (query, label) in enumerate(zip(queries, query_labels)):
-        ax = axes[i + 5]  # Second row starts at index 5
-
-        db_names = []
-        times = []
-
-        for db in databases:
-            time_seconds = query_times[query][db]
-            if time_seconds is not None:
-                db_names.append(db.title())
-                times.append(time_seconds)
-
-        if times:
-            # Create bar chart
-            bars = ax.bar(range(len(db_names)), times, color=colors[:len(db_names)], alpha=0.7)
-
-            # Add value labels on bars
-            for bar, time in zip(bars, times):
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + max(times)*0.02,
-                       f'{time:.4f}', ha='center', va='bottom', fontweight='normal')
-
-            # Customize plot
-            ax.set_title(f'{label}\nQuery {i+1} - Time', fontweight='normal')
-            ax.set_ylabel('Time (seconds)')
-            ax.set_xticks(range(len(db_names)))
-            ax.set_xticklabels(db_names, rotation=45, ha='right')
-            ax.grid(True, alpha=0.3, axis='y')
-
-            # Set y-axis to start from 0
-            ax.set_ylim(bottom=0)
-
-        else:
-            ax.text(0.5, 0.5, 'No data available',
-                   transform=ax.transAxes, ha='center', va='center',
-                   fontsize=12, color='gray')
-            ax.set_title(f'{label}\nQuery {i+1} - Time', fontweight='normal')
-
-    # Total duration subplot (first row, third plot)
-    ax = axes[2]
-    db_names = []
-    totals = []
-    for db in databases:
-        if total_query_times[db] > 0:
-            db_names.append(db.title())
-            totals.append(total_query_times[db])
-
-    if totals:
-        bars = ax.bar(range(len(db_names)), totals, color=colors[:len(db_names)], alpha=0.7)
-        for bar, total in zip(bars, totals):
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height + max(totals)*0.02,
-                   f'{total:.4f}', ha='center', va='bottom', fontweight='normal')
-        ax.set_title('Total Query Duration', fontweight='normal')
-        ax.set_ylabel('Time (seconds)')
-        ax.set_xticks(range(len(db_names)))
-        ax.set_xticklabels(db_names, rotation=45, ha='right')
-        ax.grid(True, alpha=0.3, axis='y')
-        ax.set_ylim(bottom=0)
-    else:
-        ax.text(0.5, 0.5, 'No data available',
-               transform=ax.transAxes, ha='center', va='center',
-               fontsize=12, color='gray')
-        ax.set_title('Total Query Duration', fontweight='normal')
-
-    # Plot query TPS (third row)
-    for i, (query, label) in enumerate(zip(queries, query_labels)):
-        ax = axes[i + 10]  # Third row starts at index 10
-
-        db_names = []
-        tps_values = []
-
-        for db in databases:
-            tps = query_tps[query][db]
-            if tps is not None:
-                db_names.append(db.title())
-                tps_values.append(tps)
-
-        if tps_values:
-            # Create bar chart
-            bars = ax.bar(range(len(db_names)), tps_values, color=colors[:len(db_names)], alpha=0.7)
-
-            # Add value labels on bars
-            for bar, tps_val in zip(bars, tps_values):
-                height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + max(tps_values)*0.02,
-                       f'{tps_val:.2f}', ha='center', va='bottom', fontweight='normal')
-
-            # Customize plot
-            ax.set_title(f'{label}\nQuery {i+1} - TPS', fontweight='normal')
-            ax.set_ylabel('Transactions Per Second')
-            ax.set_xticks(range(len(db_names)))
-            ax.set_xticklabels(db_names, rotation=45, ha='right')
-            ax.grid(True, alpha=0.3, axis='y')
-
-            # Set y-axis to start from 0
-            ax.set_ylim(bottom=0)
-
-        else:
-            ax.text(0.5, 0.5, 'No data available',
-                   transform=ax.transAxes, ha='center', va='center',
-                   fontsize=12, color='gray')
-            ax.set_title(f'{label}\nQuery {i+1} - TPS', fontweight='normal')
-
-    plt.tight_layout()
-
-    # Save plot
-    plot_file = os.path.join(plots_dir, f'{scale}_{concurrency}_{transactions}_performance_comparison.png')
-    plt.savefig(plot_file, dpi=300, bbox_inches='tight')
-    plt.close()
-
-    print(f"Performance plot saved to: {plot_file}")
 
     # Generate aggregated plot (all queries in one chart) - Time
     fig2, ax2 = plt.subplots(figsize=(10, 6))
@@ -532,12 +367,106 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
         plt.close()
         # print(f"Resource usage plot saved to: {resource_plot_file}")
 
-    # Generate Combined Summary Plot (2x2)
-    fig_combined, axes_combined = plt.subplots(2, 2, figsize=(24, 18))
+    # Generate Combined Summary Plot (3x4)
+    fig_combined = plt.figure(figsize=(24, 24))
     fig_combined.suptitle(f'ParadeDB vs Elasticsearch Benchmark Summary ({scale})', fontsize=20, fontweight='normal')
     
-    # 1. Aggregated Time (Top-Left)
-    ax_c1 = axes_combined[0, 0]
+    # Row 1: Startup, Data Loading, Total Query Duration, Database Size
+    
+    # 1. Startup Time (Top-Left)
+    ax_startup = plt.subplot2grid((3, 4), (0, 0), fig=fig_combined)
+    db_names = []
+    startup_values = []
+    for db in databases:
+        if startup_times[db] is not None:
+            db_names.append(db.title())
+            startup_values.append(startup_times[db])
+
+    if startup_values:
+        bars = ax_startup.bar(range(len(db_names)), startup_values, color=colors[:len(db_names)], alpha=0.7)
+        ax_startup.set_title('Startup Time (seconds)')
+        ax_startup.set_ylabel('Time (s)')
+        ax_startup.set_xticks(range(len(db_names)))
+        ax_startup.set_xticklabels(db_names, rotation=0)
+        for bar, time in zip(bars, startup_values):
+            ax_startup.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, f'{time:.2f}s', 
+                   ha='center', va='bottom', fontsize=10)
+    else:
+        ax_startup.text(0.5, 0.5, 'No data available', transform=ax_startup.transAxes, ha='center', va='center')
+
+    # 2. Data Loading & Indexing Time (Top-Center-Left)
+    ax_loading = plt.subplot2grid((3, 4), (0, 1), fig=fig_combined)
+    db_names = []
+    data_loading_values = []
+    for db in databases:
+        value = data_loading_times[db]
+        if index_creation_times[db] is not None:
+            value = (value or 0) + index_creation_times[db]
+        if value is not None:
+            db_names.append(db.title())
+            data_loading_values.append(value)
+
+    if data_loading_values:
+        bars = ax_loading.bar(range(len(db_names)), data_loading_values, color=colors[:len(db_names)], alpha=0.7)
+        ax_loading.set_title('Data Loading & Indexing Time (seconds)')
+        ax_loading.set_ylabel('Time (s)')
+        ax_loading.set_xticks(range(len(db_names)))
+        ax_loading.set_xticklabels(db_names, rotation=0)
+        for bar, time in zip(bars, data_loading_values):
+            ax_loading.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max(data_loading_values)*0.02, 
+                   f'{time:.2f}s', ha='center', va='bottom', fontsize=10)
+    else:
+        ax_loading.text(0.5, 0.5, 'No data available', transform=ax_loading.transAxes, ha='center', va='center')
+
+    # 3. Total Query Duration (Top-Center-Right)
+    ax_total = plt.subplot2grid((3, 4), (0, 2), fig=fig_combined)
+    db_names = []
+    totals = []
+    for db in databases:
+        if total_query_times[db] > 0:
+            db_names.append(db.title())
+            totals.append(total_query_times[db])
+
+    if totals:
+        bars = ax_total.bar(range(len(db_names)), totals, color=colors[:len(db_names)], alpha=0.7)
+        for bar, total in zip(bars, totals):
+            height = bar.get_height()
+            ax_total.text(bar.get_x() + bar.get_width()/2., height + max(totals)*0.02,
+                   f'{total:.4f}', ha='center', va='bottom', fontweight='normal')
+        ax_total.set_title('Total Query Duration', fontweight='normal')
+        ax_total.set_ylabel('Time (seconds)')
+        ax_total.set_xticks(range(len(db_names)))
+        ax_total.set_xticklabels(db_names, rotation=0, ha='center')
+        ax_total.grid(True, alpha=0.3, axis='y')
+        ax_total.set_ylim(bottom=0)
+    else:
+        ax_total.text(0.5, 0.5, 'No data available', transform=ax_total.transAxes, ha='center', va='center')
+
+    # 4. Database Size (Top-Right)
+    ax_c3 = plt.subplot2grid((3, 4), (0, 3), fig=fig_combined)
+    db_names_size = []
+    sizes_mb_combined = []
+    for db in databases:
+        if index_sizes[db] is not None:
+            db_names_size.append(db.title())
+            sizes_mb_combined.append(index_sizes[db] / (1024 * 1024))
+
+    if sizes_mb_combined:
+        bars = ax_c3.bar(range(len(db_names_size)), sizes_mb_combined, color=colors[:len(db_names_size)], alpha=0.7)
+        ax_c3.set_ylabel('Size (MB)')
+        ax_c3.set_title('Database Size Comparison', fontweight='normal')
+        ax_c3.set_xticks(range(len(db_names_size)))
+        ax_c3.set_xticklabels(db_names_size, rotation=0)
+        for bar, size in zip(bars, sizes_mb_combined):
+            ax_c3.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{size:.2f} MB', 
+                      ha='center', va='bottom', fontsize=10)
+    else:
+        ax_c3.text(0.5, 0.5, 'No data available', transform=ax_c3.transAxes, ha='center', va='center')
+
+    # Row 2: Aggregated Time, Aggregated TPS
+    
+    # 5. Aggregated Time (Middle-Left)
+    ax_c1 = plt.subplot2grid((3, 4), (1, 0), colspan=2, fig=fig_combined)
     x = np.arange(len(queries))
     width = 0.35
     
@@ -557,15 +486,15 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
         ax_c1.set_ylabel('Time (seconds)')
         ax_c1.set_title('Query Performance (Time)', fontweight='normal')
         ax_c1.set_xticks(x + width/2)
-        ax_c1.set_xticklabels(query_labels)
+        ax_c1.set_xticklabels(query_labels, rotation=0)
         ax_c1.legend()
         ax_c1.grid(True, alpha=0.3, axis='y')
         ax_c1.set_ylim(bottom=0)
     else:
         ax_c1.text(0.5, 0.5, 'No data available', transform=ax_c1.transAxes, ha='center', va='center')
 
-    # 2. Aggregated TPS (Top-Right)
-    ax_c2 = axes_combined[0, 1]
+    # 6. Aggregated TPS (Middle-Right)
+    ax_c2 = plt.subplot2grid((3, 4), (1, 2), colspan=2, fig=fig_combined)
     db_tps_data_combined = []
     for db in databases:
         tps_values = [query_tps[q][db] for q in queries]
@@ -582,66 +511,59 @@ def generate_plots(databases, results_dir='results', plots_dir='plots', scale=''
         ax_c2.set_ylabel('TPS')
         ax_c2.set_title('Query Performance (TPS)', fontweight='normal')
         ax_c2.set_xticks(x + width/2)
-        ax_c2.set_xticklabels(query_labels)
+        ax_c2.set_xticklabels(query_labels, rotation=0)
         ax_c2.legend()
         ax_c2.grid(True, alpha=0.3, axis='y')
         ax_c2.set_ylim(bottom=0)
     else:
         ax_c2.text(0.5, 0.5, 'No data available', transform=ax_c2.transAxes, ha='center', va='center')
 
-    # 3. Database Size (Bottom-Left)
-    ax_c3 = axes_combined[1, 0]
-    db_names_size = []
-    sizes_mb_combined = []
+    # Calculate query start times for each database
+    query_start_times = {}
     for db in databases:
-        if index_sizes[db] is not None:
-            db_names_size.append(db.title())
-            sizes_mb_combined.append(index_sizes[db] / (1024 * 1024))
+        # Note: Resource monitoring starts after startup, so we don't include startup time.
+        # There is a small delay (sleep 5) in run_tests.sh before data loading starts
+        start_time = (data_loading_times[db] or 0) + (index_creation_times[db] or 0)
+        query_start_times[db] = start_time - 5 # Adjust for sleep delay
 
-    if sizes_mb_combined:
-        bars = ax_c3.bar(range(len(db_names_size)), sizes_mb_combined, color=colors[:len(db_names_size)], alpha=0.7)
-        ax_c3.set_ylabel('Size (MB)')
-        ax_c3.set_title('Database Size Comparison', fontweight='normal')
-        ax_c3.set_xticks(range(len(db_names_size)))
-        ax_c3.set_xticklabels(db_names_size)
-        for bar, size in zip(bars, sizes_mb_combined):
-            ax_c3.text(bar.get_x() + bar.get_width()/2, bar.get_height(), f'{size:.2f} MB', 
-                      ha='center', va='bottom', fontsize=10)
-    else:
-        ax_c3.text(0.5, 0.5, 'No data available', transform=ax_c3.transAxes, ha='center', va='center')
-
-    # 4. Resource Usage (Bottom-Right) - Dual Axis
-    ax_c4 = axes_combined[1, 1]
-    ax_c4_mem = ax_c4.twinx()
+    # 7. Resource Usage - CPU (Bottom-Left)
+    ax_cpu = plt.subplot2grid((3, 4), (2, 0), colspan=2, fig=fig_combined)
+    
+    # 8. Resource Usage - Memory (Bottom-Right)
+    ax_mem = plt.subplot2grid((3, 4), (2, 2), colspan=2, fig=fig_combined)
     
     has_resource_data = False
     for i, db in enumerate(databases):
         if resource_usage[db]['timestamps']:
             has_resource_data = True
-            # CPU on Left Axis (Solid)
-            ax_c4.plot(resource_usage[db]['timestamps'], resource_usage[db]['cpu'], 
-                      label=f"{db.title()} CPU", color=colors[i], linewidth=2, linestyle='-')
-            # Memory on Right Axis (Dashed)
-            ax_c4_mem.plot(resource_usage[db]['timestamps'], resource_usage[db]['memory'], 
-                          label=f"{db.title()} Mem", color=colors[i], linewidth=2, linestyle='--')
+            # CPU plot
+            ax_cpu.plot(resource_usage[db]['timestamps'], resource_usage[db]['cpu'], 
+                       label=f"{db.title()}", color=colors[i], linewidth=2)
+            # Memory plot
+            ax_mem.plot(resource_usage[db]['timestamps'], resource_usage[db]['memory'], 
+                       label=f"{db.title()}", color=colors[i], linewidth=2)
+            # Add vertical line for query start on both plots
+            if query_start_times[db] > 0:
+                ax_cpu.axvline(x=query_start_times[db], color=colors[i], linestyle=':', linewidth=2, label=f'{db.title()} Query Start')
+                ax_mem.axvline(x=query_start_times[db], color=colors[i], linestyle=':', linewidth=2, label=f'{db.title()} Query Start')
     
     if has_resource_data:
-        ax_c4.set_xlabel('Time (s)')
-        ax_c4.set_ylabel('CPU (Cores)')
-        ax_c4_mem.set_ylabel('Memory (MiB)')
-        ax_c4.set_title('Resource Usage (CPU & Memory)', fontweight='normal')
+        ax_cpu.set_xlabel('Time (s)')
+        ax_cpu.set_ylabel('CPU (Cores)')
+        ax_cpu.set_title('CPU Usage', fontweight='normal')
+        ax_cpu.legend(loc='upper right')
+        ax_cpu.grid(True, alpha=0.3)
         
-        # Combine legends
-        lines1, labels1 = ax_c4.get_legend_handles_labels()
-        lines2, labels2 = ax_c4_mem.get_legend_handles_labels()
-        ax_c4.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
-        
-        ax_c4.grid(True, alpha=0.3)
+        ax_mem.set_xlabel('Time (s)')
+        ax_mem.set_ylabel('Memory (MiB)')
+        ax_mem.set_title('Memory Usage', fontweight='normal')
+        ax_mem.legend(loc='upper right')
+        ax_mem.grid(True, alpha=0.3)
     else:
-        ax_c4.text(0.5, 0.5, 'No data available', transform=ax_c4.transAxes, ha='center', va='center')
-        ax_c4_mem.axis('off')
+        ax_cpu.text(0.5, 0.5, 'No data available', transform=ax_cpu.transAxes, ha='center', va='center')
+        ax_mem.text(0.5, 0.5, 'No data available', transform=ax_mem.transAxes, ha='center', va='center')
 
-    plt.tight_layout()
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     combined_plot_file = os.path.join(plots_dir, f'{scale}_{concurrency}_{transactions}_combined_summary.png')
     plt.savefig(combined_plot_file, dpi=300, bbox_inches='tight')
     plt.close()

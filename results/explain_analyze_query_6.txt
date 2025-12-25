@@ -1,0 +1,20 @@
+Query: SELECT d.id, d.title, c.data FROM documents d JOIN child_documents c ON (c.data->>'parent_id')::uuid = d.id WHERE d @@@ 'content:project' LIMIT 10;
+
+EXPLAIN ANALYZE Output:
+Limit  (cost=1010.42..1042.22 rows=10 width=369) (actual time=0.389..4.896 rows=10 loops=1)
+  ->  Gather  (cost=1010.42..1722.55 rows=224 width=369) (actual time=0.388..4.894 rows=10 loops=1)
+        Workers Planned: 3
+        Workers Launched: 3
+        ->  Nested Loop  (cost=10.43..700.15 rows=72 width=369) (actual time=0.533..0.630 rows=3 loops=4)
+              ->  Parallel Custom Scan (ParadeDB Scan) on documents d  (cost=10.00..10.28 rows=56 width=68) (actual time=0.444..0.469 rows=3 loops=4)
+                    Table: documents
+                    Index: documents_search_idx
+                    Segment Count: 4
+                    Heap Fetches: 7
+                    Exec Method: NormalScanExecState
+                    Scores: false
+                    Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:project","lenient":null,"conjunction_mode":null}}}}
+              ->  Index Scan using child_documents_parent_id_idx on child_documents c  (cost=0.42..12.30 rows=2 width=301) (actual time=0.051..0.057 rows=1 loops=11)
+                    Index Cond: (((data ->> 'parent_id'::text))::uuid = d.id)
+Planning Time: 0.963 ms
+Execution Time: 4.980 ms

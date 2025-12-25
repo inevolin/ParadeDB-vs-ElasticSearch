@@ -6,47 +6,44 @@ This project benchmarks the full-text search performance of **ParadeDB** (Postgr
 
 Based on the latest benchmark runs, we observed distinct performance profiles for each system:
 
-*   **Large Datasets (1M documents)**: **Elasticsearch** dominated query throughput (TPS) at both 1 and 10 concurrent clients.
-*   **Storage Efficiency**: Elasticsearch was generally more storage efficient (~1GB in 10-client run) compared to ParadeDB (~1.9GB).
-*   **Operational Overhead**: Elasticsearch consistently showed faster startup times (~13s vs ~17s), but ParadeDB was significantly faster at indexing (~72-80s vs ~132-142s).
+*   **Large Datasets (1M parent + 1M child documents)**: Elasticsearch generally leads on average TPS for full-text queries, while ParadeDB is competitive and can outperform on the JOIN workload depending on concurrency.
+*   **JOIN Workload (Query 6)**: ParadeDB uses a SQL join against `child_documents`; Elasticsearch uses a `join` field with `has_child`. In the checked runs, ParadeDB was faster for JOINs at 1 and 50 clients, and Elasticsearch was slightly faster at 10 clients.
+*   **Ingest & Indexing**: ParadeDB is materially faster end-to-end for loading + indexing in the included large runs.
 
 ## 📈 Detailed Results
 
-### 1. Large Dataset Performance (1,000,000 Documents) & Concurrency Analysis
+### 1. Large Dataset Performance (1,000,000 Parent Documents + Child Documents) & Concurrency Analysis
 
-For the large dataset, we tested performance across two different concurrency levels (1 and 10 clients) to understand how each system scales under load.
+For the large dataset, we tested performance across multiple concurrency levels (1, 10, and 50 clients) to understand how each system scales under load.
 
 #### Performance Comparison by Concurrency
 
-*Note: These results are based on 1,000 transactions per query type.*
+*Note: These results are based on 1,000 transactions per query type (Query 1–6).*
 
-| Metric | 1 Client (PG vs ES) | 10 Clients (PG vs ES) |
-| :--- | :--- | :--- |
-| **Avg Throughput (TPS)** | 179 vs **495** | 202 vs **1118** |
-| **Indexing Time** | **72.5s** vs 142.6s | **80.0s** vs 132.6s |
-| **Database Size** | ~1.90 GB vs ~3.01 GB | ~1.90 GB vs **~1.00 GB** |
-| **Startup Time** | 16.4s vs **12.9s** | 17.3s vs **12.8s** |
+| Metric | 1 Client (ParadeDB vs ES) | 10 Clients (ParadeDB vs ES) | 50 Clients (ParadeDB vs ES) |
+| :--- | :--- | :--- | :--- |
+| **Avg TPS (across Query 1–6)** | 150.96 vs **360.28** | 190.01 vs **843.97** | 444.32 vs **837.35** |
+| **Startup Time** | 16.51s vs **12.76s** | 32.28s vs **12.78s** | **14.15s** vs 18.03s |
+| **Load + Index Time** | **136.01s** vs 351.68s | **127.96s** vs 298.47s | **123.28s** vs 380.48s |
 
 #### Key Findings
 
-*   **Indexing Speed**: ParadeDB was consistently faster at indexing 1 million documents (~72-80s) compared to Elasticsearch (~132-142s).
-*   **Throughput (TPS)**:
-    *   **1 Client**: Elasticsearch was ~2.7x faster (495 TPS vs 179 TPS).
-    *   **10 Clients**: Elasticsearch maintained a significant lead (1118 TPS vs 202 TPS).
-*   **Storage**: ParadeDB's storage footprint was consistent at ~1.90GB. Elasticsearch showed variability, ranging from ~1.00GB (10 clients) to ~3.01GB (1 client).
-*   **Resource Usage**: ParadeDB used less memory (~2.7GB) compared to Elasticsearch (~4.7-5.1GB) under load.
+*   **Load + Index**: ParadeDB is faster than Elasticsearch in the included large runs.
+*   **Throughput (Avg TPS across Query 1–6)**: Elasticsearch leads at 1/10 clients; at 50 clients ParadeDB closes the gap while still trailing overall average.
+*   **JOIN Query (Query 6)**: JOIN performance differs from pure search queries; see the per-query breakdown in the summary files.
 
 #### Visualizations
 
-*(See "Workload" section for details on Query 1-5)*
+*(See "Workload" section for details on Query 1–6)*
 
-**1 Client Performance**
-![1 Client Performance](plots/large_1_1000_performance_comparison.png)
+**1 Client Summary**
 ![1 Client Summary](plots/large_1_1000_combined_summary.png)
 
-**10 Clients Performance**
-![10 Clients Performance](plots/large_10_1000_performance_comparison.png)
+**10 Clients Summary**
 ![10 Clients Summary](plots/large_10_1000_combined_summary.png)
+
+**50 Clients Summary**
+![50 Clients Summary](plots/large_50_1000_combined_summary.png)
 
 ---
 
@@ -68,13 +65,50 @@ The benchmarks were conducted using a containerized environment to ensure isolat
     *   **Elasticsearch**: Only maintains compressed inverted indexes and tokenized data optimized for search, resulting in more efficient storage.
 *   **Workload**:
     *   **Ingestion**: Bulk loading of JSON documents.
-    *   **Queries**: The benchmark executes a mix of 5 distinct query types to simulate real-world usage patterns:
+    *   **Queries**: The benchmark executes a mix of 6 distinct query types to simulate real-world usage patterns:
         1.  **Query 1 (Simple Search)**: Single-term full-text search (e.g., "strategy", "innovation"). Tests basic inverted index lookup speed.
         2.  **Query 2 (Phrase Search)**: Exact phrase matching (e.g., "project management"). Tests position-aware index performance.
-        3.  **Query 3 (Complex Query)**: Intersection of two distinct terms (e.g., "global" AND "initiative"). Tests boolean AND logic efficiency.
+        3.  **Query 3 (Complex Query)**: Two-term *OR* query (ParadeDB uses `... content:term1 OR content:term2 ...`; Elasticsearch uses a `bool.should`). Tests disjunction performance.
         4.  **Query 4 (Top-N Query)**: Single-term search with a limit on results (N=50). Tests ranking and retrieval optimization for paginated views.
-        5.  **Query 5 (Boolean Query)**: A complex combination of MUST, SHOULD, and NOT clauses (e.g., MUST contain "strategy", SHOULD contain "growth", MUST NOT contain "risk"). Tests the query engine's ability to handle complex logic and filtering.
-    *   **Concurrency**: Tests were run with 1 and 10 concurrent clients to evaluate scalability.
+        5.  **Query 5 (Boolean Query)**: A three-clause boolean query over `content` with positive and negative terms. (Implementation note: the current ParadeDB query requires both the “must” and “should” terms; Elasticsearch includes the “should” as a `should` clause alongside `must`/`must_not`.)
+        6.  **Query 6 (JOIN Query)**: Join parents to children.
+            *   **ParadeDB**: `documents` JOIN `child_documents` on `(child_documents.data->>'parent_id')::uuid = documents.id`, filtered by a full-text predicate on the parent.
+            *   **Elasticsearch**: Parent/child join using a `join_field` mapping and `has_child` query (includes `inner_hits`).
+    *   **Concurrency**: Tests are run at a configurable concurrency (e.g., 1, 10, 50) to evaluate scalability.
+
+### Data Model / Schema (UML ASCII)
+
+The benchmark uses a parent/child model so Query 6 can exercise a JOIN-style workload.
+
+```
+                 +---------------------------+
+                 |         documents         |
+                 +---------------------------+
+                 | id: UUID (PK)             |
+                 | title: TEXT               |
+                 | content: TEXT             |
+                 +---------------------------+
+                              1
+                              |
+                              | (logical relationship via data->>'parent_id'
+                              |  in child JSON; not a SQL FK)
+                              |
+                              *
+                 +---------------------------+
+                 |      child_documents      |
+                 +---------------------------+
+                 | id: UUID (PK)             |
+                 | data: JSONB               |
+                 |  - parent_id: UUID        |
+                 |  - data: {...}            |
+                 +---------------------------+
+
+
+Elasticsearch index: documents
+  - join_field: join { parent -> child }
+  - parent docs: join_field = "parent"
+  - child docs:  join_field = { name: "child", parent: <parent_id> }, routed by parent_id
+```
 
 ### Metric Definitions and Calculations
 
@@ -127,13 +161,18 @@ To run these benchmarks yourself and verify the results:
 2.  **Install Dependencies**: `pip install -r requirements.txt`
 3.  **Run Benchmark**:
     ```bash
-    # Run Large scale benchmark
+    # Run Large scale benchmark using defaults from config/benchmark_config.json
     ./run_tests.sh -s large
+
+    # Reproduce the committed large runs (1k transactions/query)
+    ./run_tests.sh -s large -c 1  -t 1000
+    ./run_tests.sh -s large -c 10 -t 1000
+    ./run_tests.sh -s large -c 50 -t 1000
     ```
 4.  **View Results**:
     *   Summaries and plots are generated in the `plots/` directory.
     *   Raw timing logs and resource usage data are in the `results/` directory.
-    *   **Query Plans**: For ParadeDB, `EXPLAIN ANALYZE` output for each query type is saved to `results/explain_analyze_query_X.txt` to assist with performance debugging.
+    *   **Query Plans**: For ParadeDB, `EXPLAIN ANALYZE` output for each query type is saved to `results/explain_analyze_query_X.txt` (X = 1..6) to assist with performance debugging.
     *   Configuration can be tweaked in `config/benchmark_config.json`.
 
 ### Advanced Usage
@@ -167,6 +206,31 @@ The benchmark is highly configurable via `config/benchmark_config.json`. Key sec
 *   **`data`**: Defines the number of documents for `small`, `medium`, and `large` scales.
 *   **`resources`**: (Used by the runner) Defines default CPU/Memory requests and limits for the Kubernetes deployments.
 *   **`queries`**: Defines the specific terms used for each query type. You can modify the lists of terms (e.g., `simple.terms`, `complex.term1s`) to change the search corpus.
+
+## 📦 Data & Output Artifacts
+
+### Data files
+
+The runner generates and/or consumes two datasets per scale:
+
+*   Parent documents: `data/documents_{scale}.json`
+*   Child documents: `data/documents_child_{scale}.json`
+
+Child documents contain a `parent_id` that references a parent document `id`. Both ParadeDB and Elasticsearch load child documents when the file exists.
+
+### Results files
+
+The benchmark runner and plot generator use a scale+concurrency+transactions naming convention:
+
+*   `results/{scale}_{concurrency}_{transactions}_{db}_results.json`
+*   `results/{scale}_{concurrency}_{transactions}_{db}_resources.csv`
+*   `results/{scale}_{concurrency}_{transactions}_{db}_startup_time.txt`
+*   ParadeDB-only query plans: `results/explain_analyze_query_{1..6}.txt`
+
+The committed example artifacts include:
+
+*   `results/large_1_1000_*`, `results/large_10_1000_*`, `results/large_50_1000_*`
+*   `plots/large_1_1000_*`, `plots/large_10_1000_*`, `plots/large_50_1000_*`
 
 ## ⚠️ Limitations & Future Work
 

@@ -2,33 +2,38 @@
   "database": "elasticsearch",
   "scale": "large",
   "metrics": {
-    "data_loading_time": 142.427345,
-    "index_creation_time": 0.12686,
-    "database_size_bytes": 3153089440,
+    "data_loading_time": 351.516118,
+    "index_creation_time": 0.164601,
+    "database_size_bytes": 1669838926,
     "query_1": {
-      "average_latency": 0.0023935367940034666,
-      "total_time": 2.4001298339999266,
-      "tps": 416.6441272610049
+      "average_latency": 0.0027019324389621034,
+      "total_time": 2.708510209000451,
+      "tps": 369.2066571050659
     },
     "query_2": {
-      "average_latency": 0.0015256210120001014,
-      "total_time": 1.531951417000073,
-      "tps": 652.7622148476738
+      "average_latency": 0.0016288290110278466,
+      "total_time": 1.6346410430014657,
+      "tps": 611.7551032267231
     },
     "query_3": {
-      "average_latency": 0.0021763627510010793,
-      "total_time": 2.182989292000002,
-      "tps": 458.08745084765127
+      "average_latency": 0.0027197000960313745,
+      "total_time": 2.726834918001259,
+      "tps": 366.72553714142305
     },
     "query_4": {
-      "average_latency": 0.0027981193739999525,
-      "total_time": 2.8037920430001577,
-      "tps": 356.6598323497503
+      "average_latency": 0.00380698366901197,
+      "total_time": 3.8140401679993374,
+      "tps": 262.18916318454825
     },
     "query_5": {
-      "average_latency": 0.0016870969180008614,
-      "total_time": 1.693625376,
-      "tps": 590.4493485813241
+      "average_latency": 0.002226810453003054,
+      "total_time": 2.2344293760015717,
+      "tps": 447.5415561307482
+    },
+    "query_6": {
+      "average_latency": 0.009584102446013276,
+      "total_time": 9.59301717100061,
+      "tps": 104.242490362987
     }
   }
 }

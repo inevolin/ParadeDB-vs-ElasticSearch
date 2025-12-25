@@ -1,50 +1,54 @@
 # Performance Comparison Summary
 
 Startup Times:
-  Paradedb: 16.41s
-  Elasticsearch: 12.94s
+  Paradedb: 16.51s
+  Elasticsearch: 12.76s
 
 Data Loading & Indexing Times:
-  Paradedb: 72.54s
-  Elasticsearch: 142.55s
+  Paradedb: 136.01s
+  Elasticsearch: 351.68s
 
 Database Sizes:
-  Paradedb: 1898.34 MB
-  Elasticsearch: 3007.02 MB
+  Paradedb: 2603.57 MB
+  Elasticsearch: 1592.48 MB
 
 Peak Resource Usage:
-  Paradedb: 2.77 Cores, 2705.41 MiB
-  Elasticsearch: 2.77 Cores, 4754.43 MiB
+  Paradedb: 4.07 Cores, 3527.68 MiB
+  Elasticsearch: 3.48 Cores, 5576.70 MiB
 
-Query 1: Simple Search
-  Paradedb: 0.0054s (185.29 TPS)
-  Elasticsearch: 0.0024s (416.64 TPS)
+Query 1: Simple
+  Paradedb: 0.0068s (146.90 TPS)
+  Elasticsearch: 0.0027s (369.21 TPS)
 
-Query 2: Phrase Search
-  Paradedb: 0.0057s (176.13 TPS)
-  Elasticsearch: 0.0015s (652.76 TPS)
+Query 2: Phrases
+  Paradedb: 0.0066s (150.84 TPS)
+  Elasticsearch: 0.0016s (611.76 TPS)
 
-Query 3: Complex Query
-  Paradedb: 0.0056s (177.12 TPS)
-  Elasticsearch: 0.0022s (458.09 TPS)
+Query 3: Complex
+  Paradedb: 0.0070s (142.60 TPS)
+  Elasticsearch: 0.0027s (366.73 TPS)
 
-Query 4: Top-N Query
-  Paradedb: 0.0054s (186.19 TPS)
-  Elasticsearch: 0.0028s (356.66 TPS)
+Query 4: Top-N
+  Paradedb: 0.0065s (153.18 TPS)
+  Elasticsearch: 0.0038s (262.19 TPS)
 
-Query 5: Boolean Query
-  Paradedb: 0.0058s (171.41 TPS)
-  Elasticsearch: 0.0017s (590.45 TPS)
+Query 5: Boolean
+  Paradedb: 0.0066s (151.29 TPS)
+  Elasticsearch: 0.0022s (447.54 TPS)
+
+Query 6: JOINs
+  Paradedb: 0.0062s (160.95 TPS)
+  Elasticsearch: 0.0096s (104.24 TPS)
 
 Total Query Duration:
-  Paradedb: 27.9252s
-  Elasticsearch: 10.6125s
+  Paradedb: 39.8006s
+  Elasticsearch: 22.7115s
 
 Total Workflow Duration (Setup + Ingest + Query):
-  Paradedb: 116.8777s
-  Elasticsearch: 166.1057s
+  Paradedb: 192.3217s
+  Elasticsearch: 387.1532s
 
 TPS Summary (Average across queries):
-  Paradedb: 179.23 TPS
-  Elasticsearch: 494.92 TPS
+  Paradedb: 150.96 TPS
+  Elasticsearch: 360.28 TPS
 

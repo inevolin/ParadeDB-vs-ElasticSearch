@@ -175,11 +175,17 @@ def create_table(host, port, user, password, db_name):
 
         # Create table
         cursor.execute("""
-            DROP TABLE IF EXISTS documents;
+            DROP TABLE IF EXISTS documents CASCADE;
             CREATE TABLE documents (
-                id SERIAL PRIMARY KEY,
+                id UUID PRIMARY KEY,
                 title TEXT,
                 content TEXT
+            );
+
+            DROP TABLE IF EXISTS child_documents;
+            CREATE TABLE child_documents (
+                id UUID PRIMARY KEY,
+                data JSONB
             );
         """)
 
@@ -239,9 +245,9 @@ def load_data(host, port, user, password, db_name, scale, data_dir="/data"):
                         s_buf = io.StringIO()
                         writer = csv.writer(s_buf)
                         for d in documents:
-                            writer.writerow([d.get('title', ''), d.get('content', '')])
+                            writer.writerow([d['id'], d.get('title', ''), d.get('content', '')])
                         s_buf.seek(0)
-                        cursor.copy_expert("COPY documents (title, content) FROM STDIN WITH (FORMAT CSV)", s_buf)
+                        cursor.copy_expert("COPY documents (id, title, content) FROM STDIN WITH (FORMAT CSV)", s_buf)
                         documents = []
                         
                     if count >= expected_size:
@@ -256,10 +262,47 @@ def load_data(host, port, user, password, db_name, scale, data_dir="/data"):
             s_buf = io.StringIO()
             writer = csv.writer(s_buf)
             for d in documents:
-                writer.writerow([d.get('title', ''), d.get('content', '')])
+                writer.writerow([d['id'], d.get('title', ''), d.get('content', '')])
             s_buf.seek(0)
-            cursor.copy_expert("COPY documents (title, content) FROM STDIN WITH (FORMAT CSV)", s_buf)
+            cursor.copy_expert("COPY documents (id, title, content) FROM STDIN WITH (FORMAT CSV)", s_buf)
         
+        # Load child documents
+        child_data_file = f'/data/documents_child_{scale}.json'
+        if os.path.exists(child_data_file):
+            print(f"Loading child data from {child_data_file}...")
+            child_documents = []
+            child_count = 0
+            
+            with open(child_data_file, 'r') as f:
+                for line in f:
+                    try:
+                        doc = json.loads(line.strip())
+                        child_documents.append(doc)
+                        child_count += 1
+                        
+                        if len(child_documents) >= batch_size:
+                            s_buf = io.StringIO()
+                            writer = csv.writer(s_buf)
+                            for d in child_documents:
+                                writer.writerow([d['id'], json.dumps(d)])
+                            s_buf.seek(0)
+                            cursor.copy_expert("COPY child_documents (id, data) FROM STDIN WITH (FORMAT CSV)", s_buf)
+                            child_documents = []
+                            
+                    except json.JSONDecodeError as e:
+                        print(f"Error parsing child line: {e}", file=sys.stderr)
+                        continue
+            
+            if child_documents:
+                s_buf = io.StringIO()
+                writer = csv.writer(s_buf)
+                for d in child_documents:
+                    writer.writerow([d['id'], json.dumps(d)])
+                s_buf.seek(0)
+                cursor.copy_expert("COPY child_documents (id, data) FROM STDIN WITH (FORMAT CSV)", s_buf)
+            
+            print(f"Loaded {child_count} child documents")
+
         conn.commit()
         end_time = time.perf_counter()
         loading_time = end_time - start_time
@@ -301,6 +344,12 @@ def create_index(host, port, user, password, db_name):
             WITH (key_field='id');
         """)
 
+        # Create indexes on child_documents
+        cursor.execute("""
+            CREATE INDEX child_documents_parent_id_idx ON child_documents USING btree (CAST(data->>'parent_id' AS UUID));
+            CREATE INDEX child_documents_data_idx ON child_documents USING gin (data);
+        """)
+
         # Wait for index creation to complete
         print("Waiting for index creation to complete...")
         while True:
@@ -325,6 +374,7 @@ def create_index(host, port, user, password, db_name):
         old_isolation_level = conn.isolation_level
         conn.set_isolation_level(0) # ISOLATION_LEVEL_AUTOCOMMIT
         cursor.execute("VACUUM ANALYZE documents;")
+        cursor.execute("VACUUM ANALYZE child_documents;")
         conn.set_isolation_level(old_isolation_level)
 
         # Wait for VACUUM ANALYZE to complete
@@ -411,6 +461,11 @@ def run_concurrent_queries(conn_pool, db_name, query_type, transactions, concurr
             'should_terms': queries_config['boolean']['should_terms'],
             'not_terms': queries_config['boolean']['not_terms'],
             'query_template': lambda must, should, not_term: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{must} AND (content:{should}) AND NOT content:{not_term}' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
+        },
+        6: {
+            'name': 'Join Query',
+            'terms': queries_config['simple']['terms'],
+            'query_template': lambda term: f"SELECT d.id, d.title, c.data FROM documents d JOIN child_documents c ON (c.data->>'parent_id')::uuid = d.id WHERE d @@@ 'content:{term}' LIMIT 10;"
         }
     }
 
@@ -530,6 +585,11 @@ def run_explain_analyze(conn_pool, query_type):
             'should_terms': queries_config['boolean']['should_terms'],
             'not_terms': queries_config['boolean']['not_terms'],
             'query_template': lambda must, should, not_term: f"SELECT id, title FROM documents WHERE documents @@@ 'content:{must} AND (content:{should}) AND NOT content:{not_term}' ORDER BY paradedb.score(documents) DESC LIMIT 10;"
+        },
+        6: {
+            'name': 'Join Query',
+            'terms': queries_config['simple']['terms'],
+            'query_template': lambda term: f"SELECT d.id, d.title, c.data FROM documents d JOIN child_documents c ON (c.data->>'parent_id')::uuid = d.id WHERE d @@@ 'content:{term}' LIMIT 10;"
         }
     }
 
@@ -629,7 +689,7 @@ def main():
             print("Warming up...")
             
         # Warmup
-        for query_type in [1, 2, 3, 4, 5]:
+        for query_type in [1, 2, 3, 4, 5, 6]:
             # Run EXPLAIN ANALYZE once per query type during warmup
             run_explain_analyze(benchmark_pool, query_type)
             
@@ -665,8 +725,8 @@ def main():
                 results['metrics']['database_size_bytes'] = int(f.read().split(':')[1].strip().split(' ')[0])
         except: pass
 
-        # Run all five query types
-        for query_type in [1, 2, 3, 4, 5]:
+        # Run all six query types
+        for query_type in [1, 2, 3, 4, 5, 6]:
             avg_latency, total_time = run_concurrent_queries(
                 benchmark_pool, args.dbname, query_type,
                 args.transactions, args.concurrency, args.quiet

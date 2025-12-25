@@ -1,50 +1,54 @@
 # Performance Comparison Summary
 
 Startup Times:
-  Paradedb: 17.26s
-  Elasticsearch: 12.82s
+  Paradedb: 32.28s
+  Elasticsearch: 12.78s
 
 Data Loading & Indexing Times:
-  Paradedb: 80.00s
-  Elasticsearch: 132.57s
+  Paradedb: 127.96s
+  Elasticsearch: 298.47s
 
 Database Sizes:
-  Paradedb: 1898.40 MB
-  Elasticsearch: 999.68 MB
+  Paradedb: 2603.55 MB
+  Elasticsearch: 3407.24 MB
 
 Peak Resource Usage:
-  Paradedb: 4.75 Cores, 2709.50 MiB
-  Elasticsearch: 4.09 Cores, 5079.04 MiB
+  Paradedb: 4.65 Cores, 3490.82 MiB
+  Elasticsearch: 4.70 Cores, 6265.86 MiB
 
-Query 1: Simple Search
-  Paradedb: 0.0464s (213.81 TPS)
-  Elasticsearch: 0.0103s (931.13 TPS)
+Query 1: Simple
+  Paradedb: 0.0531s (185.77 TPS)
+  Elasticsearch: 0.0111s (875.20 TPS)
 
-Query 2: Phrase Search
-  Paradedb: 0.0500s (197.15 TPS)
-  Elasticsearch: 0.0063s (1510.55 TPS)
+Query 2: Phrases
+  Paradedb: 0.0537s (183.69 TPS)
+  Elasticsearch: 0.0077s (1261.69 TPS)
 
-Query 3: Complex Query
-  Paradedb: 0.0487s (202.89 TPS)
-  Elasticsearch: 0.0085s (1140.20 TPS)
+Query 3: Complex
+  Paradedb: 0.0521s (188.25 TPS)
+  Elasticsearch: 0.0114s (864.51 TPS)
 
-Query 4: Top-N Query
-  Paradedb: 0.0462s (212.73 TPS)
-  Elasticsearch: 0.0141s (689.85 TPS)
+Query 4: Top-N
+  Paradedb: 0.0485s (202.27 TPS)
+  Elasticsearch: 0.0130s (747.40 TPS)
 
-Query 5: Boolean Query
-  Paradedb: 0.0537s (183.59 TPS)
-  Elasticsearch: 0.0073s (1317.08 TPS)
+Query 5: Boolean
+  Paradedb: 0.0580s (169.76 TPS)
+  Elasticsearch: 0.0092s (1057.42 TPS)
+
+Query 6: JOINs
+  Paradedb: 0.0469s (210.34 TPS)
+  Elasticsearch: 0.0385s (257.62 TPS)
 
 Total Query Duration:
-  Paradedb: 24.8262s
-  Elasticsearch: 4.8219s
+  Paradedb: 31.7278s
+  Elasticsearch: 9.2573s
 
 Total Workflow Duration (Setup + Ingest + Query):
-  Paradedb: 122.0917s
-  Elasticsearch: 150.2102s
+  Paradedb: 191.9679s
+  Elasticsearch: 320.5054s
 
 TPS Summary (Average across queries):
-  Paradedb: 202.03 TPS
-  Elasticsearch: 1117.76 TPS
+  Paradedb: 190.01 TPS
+  Elasticsearch: 843.97 TPS
 

@@ -1,17 +1,20 @@
 Query: SELECT id, title FROM documents WHERE documents @@@ 'content:strategy AND (content:growth) AND NOT content:risk' ORDER BY paradedb.score(documents) DESC LIMIT 10;
 
 EXPLAIN ANALYZE Output:
-Limit  (cost=10.00..10.01 rows=1 width=60) (actual time=0.136..0.137 rows=0 loops=1)
-  ->  Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.01 rows=1 width=60) (actual time=0.135..0.136 rows=0 loops=1)
-        Table: documents
-        Index: documents_search_idx
-        Segment Count: 1
-        Heap Fetches: 0
-        Exec Method: TopNScanExecState
-        Scores: true
-           TopN Order By: pdb.score() desc
-           TopN Limit: 10
-           Queries: 1
-        Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:strategy AND (content:growth) AND NOT content:risk","lenient":null,"conjunction_mode":null}}}}
-Planning Time: 0.469 ms
-Execution Time: 0.186 ms
+Limit  (cost=1010.04..1010.16 rows=1 width=72) (actual time=3.598..5.530 rows=0 loops=1)
+  ->  Gather Merge  (cost=1010.04..1010.16 rows=1 width=72) (actual time=3.597..5.528 rows=0 loops=1)
+        Workers Planned: 3
+        Workers Launched: 3
+        ->  Parallel Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.00 rows=0 width=72) (actual time=1.294..1.296 rows=0 loops=4)
+              Table: documents
+              Index: documents_search_idx
+              Segment Count: 4
+              Heap Fetches: 0
+              Exec Method: TopNScanExecState
+              Scores: true
+                 TopN Order By: pdb.score() desc
+                 TopN Limit: 10
+                 Queries: 1
+              Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:strategy AND (content:growth) AND NOT content:risk","lenient":null,"conjunction_mode":null}}}}
+Planning Time: 0.596 ms
+Execution Time: 5.632 ms

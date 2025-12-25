@@ -2,33 +2,38 @@
   "database": "paradedb",
   "scale": "large",
   "metrics": {
-    "data_loading_time": 26.814763,
-    "index_creation_time": 53.18874,
-    "database_size_bytes": 1990618259,
+    "data_loading_time": 50.212811,
+    "index_creation_time": 77.746285,
+    "database_size_bytes": 2730019987,
     "query_1": {
-      "average_latency": 0.046404872668003916,
-      "total_time": 4.677059210999687,
-      "tps": 213.80956598714033
+      "average_latency": 0.05311731648805653,
+      "total_time": 5.38310158600143,
+      "tps": 185.766511001848
     },
     "query_2": {
-      "average_latency": 0.05003593243399882,
-      "total_time": 5.072373211000013,
-      "tps": 197.1463767357235
+      "average_latency": 0.053701052385022194,
+      "total_time": 5.443824253001367,
+      "tps": 183.69439451478723
     },
     "query_3": {
-      "average_latency": 0.04867515785900105,
-      "total_time": 4.928823961000035,
-      "tps": 202.88815504725488
+      "average_latency": 0.052121824363042836,
+      "total_time": 5.312061460997938,
+      "tps": 188.25083394500808
     },
     "query_4": {
-      "average_latency": 0.04624257563499441,
-      "total_time": 4.7008910849999666,
-      "tps": 212.72562625219962
+      "average_latency": 0.048530533775956425,
+      "total_time": 4.9439658770024835,
+      "tps": 202.2667681934524
     },
     "query_5": {
-      "average_latency": 0.0537084234189997,
-      "total_time": 5.447031709999919,
-      "tps": 183.58622700215835
+      "average_latency": 0.05800762770297297,
+      "total_time": 5.890664418999222,
+      "tps": 169.76013720535317
+    },
+    "query_6": {
+      "average_latency": 0.04685542906503906,
+      "total_time": 4.754226585999277,
+      "tps": 210.33915441575718
     }
   }
 }

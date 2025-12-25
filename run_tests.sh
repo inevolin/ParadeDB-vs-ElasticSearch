@@ -124,15 +124,12 @@ generate_data_on_host() {
     else
         print_info "Data file $DATA_DIR/documents_${SCALE}.json already exists"
     fi
-    
-    if [[ ! -f "$DATA_DIR/documents_${SCALE}.ndjson" ]]; then
-        cat "$DATA_DIR/documents_${SCALE}.json" | while read -r line; do
-            echo "{\"index\":{\"_index\":\"documents\"}}"
-            echo "$line"
-        done > "$DATA_DIR/documents_${SCALE}.ndjson"
-        print_success "NDJSON file generated and saved to $DATA_DIR/documents_${SCALE}.ndjson"
+
+    if [[ ! -f "$DATA_DIR/documents_child_${SCALE}.json" ]]; then
+        python3 scripts/generate_synthetic_data.py "$SCALE" --mode child > "$DATA_DIR/documents_child_${SCALE}.json"
+        print_success "Child data generated and saved to $DATA_DIR/documents_child_${SCALE}.json"
     else
-        print_info "NDJSON file $DATA_DIR/documents_${SCALE}.ndjson already exists"
+        print_info "Child data file $DATA_DIR/documents_child_${SCALE}.json already exists"
     fi
 }
 

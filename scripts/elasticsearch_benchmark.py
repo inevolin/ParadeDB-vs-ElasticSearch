@@ -92,7 +92,13 @@ def setup_index(session, es_host, es_port, index_name, quiet=False):
         "mappings": {
             "properties": {
                 "title": {"type": "text"},
-                "content": {"type": "text"}
+                "content": {"type": "text"},
+                "join_field": { 
+                    "type": "join",
+                    "relations": {
+                        "parent": "child" 
+                    }
+                }
             }
         }
     }
@@ -134,7 +140,7 @@ def load_data(session, es_host, es_port, index_name, scale, quiet=False):
     }
     expected_size = config['data'][scale_size_map[scale]]
     
-    data_file = f'/data/documents_{scale}.ndjson'
+    data_file = f'/data/documents_{scale}.json'
     
     if not quiet:
         print(f"Loading data from {data_file}...")
@@ -145,39 +151,74 @@ def load_data(session, es_host, es_port, index_name, scale, quiet=False):
 
     # Send bulk requests in batches
     batch_size = 5000
-    bulk_data = ""
-    batch_count = 0
-    total_count = 0
+    bulk_data = []
     
     bulk_url = f"http://{es_host}:{es_port}/_bulk?refresh=true"
     headers = {'Content-Type': 'application/x-ndjson'}
     
-    with open(data_file, 'r') as f:
-        for line in f:
-            bulk_data += line
-            batch_count += 1
-            
-            # Only count actual documents (lines that don't start with index action)
-            if not line.strip().startswith('{"index"'):
-                total_count += 1
-            
-            if batch_count >= batch_size:
-                response = session.post(bulk_url, data=bulk_data, headers=headers, timeout=60)
-                if response.status_code not in [200, 201]:
-                    print(f"Bulk load failed: {response.text}", file=sys.stderr)
-                    return False
-                bulk_data = ""
-                batch_count = 0
-                
-            if total_count >= expected_size:
-                break
-    
-    # Send remaining data
-    if bulk_data:
-        response = session.post(bulk_url, data=bulk_data, headers=headers, timeout=60)
+    def flush_batch(data):
+        if not data: return True
+        body = "\n".join(data) + "\n"
+        response = session.post(bulk_url, data=body, headers=headers, timeout=60)
         if response.status_code not in [200, 201]:
             print(f"Bulk load failed: {response.text}", file=sys.stderr)
             return False
+        return True
+
+    # Load parents
+    count = 0
+    with open(data_file, 'r') as f:
+        for line in f:
+            try:
+                doc = json.loads(line)
+                action = {"index": {"_index": index_name, "_id": str(doc['id'])}}
+                doc['join_field'] = 'parent'
+                
+                bulk_data.append(json.dumps(action))
+                bulk_data.append(json.dumps(doc))
+                count += 1
+                
+                if len(bulk_data) >= batch_size * 2:
+                    if not flush_batch(bulk_data): return False
+                    bulk_data = []
+                
+                if count >= expected_size:
+                    break
+            except json.JSONDecodeError:
+                continue
+                
+    if bulk_data:
+        if not flush_batch(bulk_data): return False
+        bulk_data = []
+        
+    print(f"Loaded {count} parent documents")
+
+    # Load children
+    child_data_file = f'/data/documents_child_{scale}.json'
+    if os.path.exists(child_data_file):
+        print(f"Loading child data from {child_data_file}...")
+        child_count = 0
+        with open(child_data_file, 'r') as f:
+            for line in f:
+                try:
+                    doc = json.loads(line)
+                    action = {"index": {"_index": index_name, "routing": str(doc['parent_id'])}}
+                    doc['join_field'] = {'name': 'child', 'parent': str(doc['parent_id'])}
+                    
+                    bulk_data.append(json.dumps(action))
+                    bulk_data.append(json.dumps(doc))
+                    child_count += 1
+                    
+                    if len(bulk_data) >= batch_size * 2:
+                        if not flush_batch(bulk_data): return False
+                        bulk_data = []
+                except json.JSONDecodeError:
+                    continue
+        
+        if bulk_data:
+            if not flush_batch(bulk_data): return False
+            bulk_data = []
+        print(f"Loaded {child_count} child documents")
     
     # Restore refresh interval
     session.put(settings_url, json={"index": {"refresh_interval": "1s"}}, timeout=10)
@@ -220,7 +261,7 @@ def load_data(session, es_host, es_port, index_name, scale, quiet=False):
     loading_time = end_time - start_time
     
     if not quiet:
-        print(f"Loaded {total_count} documents")
+        print(f"Loaded {count} parent documents and {child_count} child documents")
     
     # Save data loading time
     with open('/tmp/data_loading_time.txt', 'w') as f:
@@ -351,6 +392,29 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
                 "_source": ["title"],
                 "sort": [{"_score": "desc"}]
             }
+        },
+        6: {
+            'name': 'Join Query',
+            'terms': queries_config['simple']['terms'],
+            'query_template': lambda term: {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"match": {"content": term}},
+                            {
+                                "has_child": {
+                                    "type": "child",
+                                    "query": {"match_all": {}},
+                                    "inner_hits": {}
+                                }
+                            }
+                        ]
+                    }
+                },
+                "size": 10,
+                "_source": ["title"],
+                "sort": [{"_score": "desc"}]
+            }
         }
     }
     
@@ -456,7 +520,7 @@ def main():
     if not quiet:
         print("Warming up...")
         
-    for query_type in [1, 2, 3, 4, 5]:
+    for query_type in [1, 2, 3, 4, 5, 6]:
         run_concurrent_queries(
             session, es_host, es_port, index_name, query_type,
             transactions=10, # Warmup with 10 transactions
@@ -490,7 +554,7 @@ def main():
             results['metrics']['database_size_bytes'] = int(f.read().split(':')[1].strip().split(' ')[0])
     except: pass
 
-    for query_type in [1, 2, 3, 4, 5]:
+    for query_type in [1, 2, 3, 4, 5, 6]:
         avg_latency, total_time = run_concurrent_queries(
             session, es_host, es_port, index_name, query_type,
             transactions, concurrency, quiet

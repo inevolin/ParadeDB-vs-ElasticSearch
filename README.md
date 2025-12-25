@@ -12,6 +12,8 @@ Based on the latest benchmark runs, we observed distinct performance profiles fo
 
 ## 📈 Detailed Results
 
+For a query-by-query explanation of how Elasticsearch vs ParadeDB behaves (and where semantics differ), see [QUERY_BREAKDOWN.md](QUERY_BREAKDOWN.md).
+
 ### 1. Large Dataset Performance (1,000,000 Parent Documents + Child Documents) & Concurrency Analysis
 
 For the large dataset, we tested performance across multiple concurrency levels (1, 10, and 50 clients) to understand how each system scales under load.

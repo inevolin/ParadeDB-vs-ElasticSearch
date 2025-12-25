@@ -7,7 +7,7 @@ This project benchmarks the full-text search performance of **ParadeDB** (Postgr
 Based on the latest benchmark runs, we observed distinct performance profiles for each system:
 
 *   **Large Datasets (1M parent + 1M child documents)**: Elasticsearch generally leads on average TPS for full-text queries, while ParadeDB is competitive and can outperform on the JOIN workload depending on concurrency.
-*   **JOIN Workload (Query 6)**: ParadeDB uses a SQL join against `child_documents`; Elasticsearch uses a `join` field with `has_child`. In the checked runs, ParadeDB was faster for JOINs at 1 and 50 clients, and Elasticsearch was slightly faster at 10 clients.
+*   **JOIN Workload (Query 6)**: ParadeDB uses a SQL join against `child_documents`; Elasticsearch uses a `join` field with `has_child`. In the checked runs, ParadeDB was faster for JOINs at 1 and 50 clients, and Elasticsearch was faster at 10 clients.
 *   **Ingest & Indexing**: ParadeDB is materially faster end-to-end for loading + indexing in the included large runs.
 
 ## 📈 Detailed Results
@@ -24,9 +24,9 @@ For the large dataset, we tested performance across multiple concurrency levels 
 
 | Metrics (ParadeDB vs ES) | 1 Client | 10 Clients | 50 Clients |
 | :--- | :--- | :--- | :--- |
-| **Avg TPS (across Query 1–6)** | 150.96 vs **360.28** | 190.01 vs **843.97** | 444.32 vs **837.35** |
-| **Startup Time** | 16.51s vs **12.76s** | 32.28s vs **12.78s** | **14.15s** vs 18.03s |
-| **Load + Index Time** | **136.01s** vs 351.68s | **127.96s** vs 298.47s | **123.28s** vs 380.48s |
+| **Avg TPS (across Query 1–6)** | 150.96 vs **360.28** | 183.75 vs **794.87** | 444.32 vs **837.35** |
+| **Startup Time** | 16.51s vs **12.76s** | 15.37s vs **12.79s** | **14.15s** vs 18.03s |
+| **Load + Index Time** | **136.01s** vs 351.68s | **141.10s** vs 344.74s | **123.28s** vs 380.48s |
 
 #### Key Findings
 

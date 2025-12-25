@@ -1,20 +1,20 @@
 Query: SELECT id, title FROM documents WHERE documents @@@ 'content:project' ORDER BY paradedb.score(documents) DESC LIMIT 10;
 
 EXPLAIN ANALYZE Output:
-Limit  (cost=1010.04..1011.22 rows=10 width=72) (actual time=5.732..6.908 rows=10 loops=1)
-  ->  Gather Merge  (cost=1010.04..1036.38 rows=224 width=72) (actual time=5.730..6.904 rows=10 loops=1)
+Limit  (cost=1010.04..1011.22 rows=10 width=72) (actual time=9.422..16.361 rows=10 loops=1)
+  ->  Gather Merge  (cost=1010.04..1033.09 rows=196 width=72) (actual time=9.420..16.357 rows=10 loops=1)
         Workers Planned: 3
         Workers Launched: 3
-        ->  Parallel Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.02 rows=2 width=72) (actual time=1.733..1.767 rows=2 loops=4)
+        ->  Parallel Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.02 rows=2 width=72) (actual time=2.910..3.041 rows=5 loops=4)
               Table: documents
               Index: documents_search_idx
               Segment Count: 4
-              Heap Fetches: 10
+              Heap Fetches: 9
               Exec Method: TopNScanExecState
               Scores: true
                  TopN Order By: pdb.score() desc
                  TopN Limit: 10
-                 Queries: 1
+                 Queries: 2
               Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:project","lenient":null,"conjunction_mode":null}}}}
-Planning Time: 7.605 ms
-Execution Time: 7.269 ms
+Planning Time: 9.812 ms
+Execution Time: 17.054 ms

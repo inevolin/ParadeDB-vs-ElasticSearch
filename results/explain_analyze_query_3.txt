@@ -1,11 +1,11 @@
 Query: SELECT id, title FROM documents WHERE documents @@@ 'content:global OR content:initiative' ORDER BY paradedb.score(documents) DESC LIMIT 20;
 
 EXPLAIN ANALYZE Output:
-Limit  (cost=1010.04..1012.39 rows=20 width=72) (actual time=3.765..5.568 rows=20 loops=1)
-  ->  Gather Merge  (cost=1010.04..1042.51 rows=276 width=72) (actual time=3.764..5.565 rows=20 loops=1)
+Limit  (cost=1010.04..1012.39 rows=20 width=72) (actual time=3.580..4.692 rows=20 loops=1)
+  ->  Gather Merge  (cost=1010.04..1038.16 rows=239 width=72) (actual time=3.579..4.689 rows=20 loops=1)
         Workers Planned: 3
         Workers Launched: 3
-        ->  Parallel Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.04 rows=5 width=72) (actual time=1.104..1.169 rows=5 loops=4)
+        ->  Parallel Custom Scan (ParadeDB Scan) on documents  (cost=10.00..10.04 rows=5 width=72) (actual time=1.120..1.187 rows=5 loops=4)
               Table: documents
               Index: documents_search_idx
               Segment Count: 4
@@ -16,5 +16,5 @@ Limit  (cost=1010.04..1012.39 rows=20 width=72) (actual time=3.765..5.568 rows=2
                  TopN Limit: 20
                  Queries: 1
               Tantivy Query: {"with_index":{"query":{"parse_with_field":{"field":"id","query_string":"content:global OR content:initiative","lenient":null,"conjunction_mode":null}}}}
-Planning Time: 0.877 ms
-Execution Time: 5.651 ms
+Planning Time: 0.937 ms
+Execution Time: 4.782 ms

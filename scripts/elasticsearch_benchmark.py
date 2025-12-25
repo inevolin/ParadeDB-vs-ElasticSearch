@@ -311,6 +311,33 @@ def run_query(session, es_host, es_port, index_name, query_body):
             timeout=10
         )
         response.raise_for_status()
+
+        # Force client-side JSON parsing and minimal materialization of results.
+        # Without this, the benchmark mostly measures network/HTTP overhead and
+        # server time, but not the cost of decoding/handling responses.
+        data = response.json()
+
+        # Walk hits + inner_hits and touch selected fields so the client does
+        # comparable work to a DB client fetching/decoding rows.
+        hits = data.get('hits', {}).get('hits', [])
+        materialized = []
+        for hit in hits:
+            source = hit.get('_source') or {}
+            materialized.append((hit.get('_id'), source.get('id'), source.get('title')))
+
+            inner_hits = hit.get('inner_hits') or {}
+            for inner in inner_hits.values():
+                inner_docs = inner.get('hits', {}).get('hits', [])
+                for inner_hit in inner_docs:
+                    inner_source = inner_hit.get('_source') or {}
+                    materialized.append((
+                        inner_hit.get('_id'),
+                        inner_source.get('id'),
+                        inner_source.get('title'),
+                    ))
+
+        # Prevent accidental dead-code elimination / keep behavior explicit.
+        _ = len(materialized)
         
         end_time = time.perf_counter()
         return end_time - start_time
@@ -338,7 +365,7 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
             'query_template': lambda term: {
                 "query": {"match": {"content": term}},
                 "size": 10,
-                "_source": ["title"],
+                "_source": ["id", "title"],
                 "sort": [{"_score": "desc"}]
             }
         },
@@ -348,7 +375,7 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
             'query_template': lambda phrase: {
                 "query": {"match_phrase": {"content": phrase}},
                 "size": 10,
-                "_source": ["title"],
+                "_source": ["id", "title"],
                 "sort": [{"_score": "desc"}]
             }
         },
@@ -362,7 +389,7 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
                     {"match": {"content": term2}}
                 ]}},
                 "size": 20,
-                "_source": ["title"],
+                "_source": ["id", "title"],
                 "sort": [{"_score": "desc"}]
             }
         },
@@ -373,7 +400,7 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
             'query_template': lambda term, n: {
                 "query": {"match": {"content": term}},
                 "size": n,
-                "_source": ["title"],
+                "_source": ["id", "title"],
                 "sort": [{"_score": "desc"}]
             }
         },
@@ -386,10 +413,11 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
                 "query": {"bool": {
                     "must": [{"match": {"content": must}}],
                     "should": [{"match": {"content": should}}],
-                    "must_not": [{"match": {"content": not_term}}]
+                    "must_not": [{"match": {"content": not_term}}],
+                    "minimum_should_match": 1
                 }},
                 "size": 10,
-                "_source": ["title"],
+                "_source": ["id", "title"],
                 "sort": [{"_score": "desc"}]
             }
         },
@@ -412,7 +440,7 @@ def run_concurrent_queries(session, es_host, es_port, index_name, query_type, tr
                     }
                 },
                 "size": 10,
-                "_source": ["title"],
+                "_source": ["id", "title"],
                 "sort": [{"_score": "desc"}]
             }
         }

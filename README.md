@@ -39,13 +39,16 @@ For the large dataset, we tested performance across multiple concurrency levels 
 **1 Client Summary**
 ![1 Client Summary](plots/large_1_1000_combined_summary.png)
 
+---
+
 **10 Clients Summary**
 ![10 Clients Summary](plots/large_10_1000_combined_summary.png)
+
+---
 
 **50 Clients Summary**
 ![50 Clients Summary](plots/large_50_1000_combined_summary.png)
 
----
 
 ## 🔬 Methodology
 

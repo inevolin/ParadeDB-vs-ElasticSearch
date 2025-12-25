@@ -59,7 +59,8 @@ This run corresponds to `large_50_1002` and was generated with Elasticsearch 9.0
 
 **Observations (Elasticsearch 8 → 9)**
 *   **Change is workload-dependent**: Query 5 improves materially (~+20.7%).
-*   **Most other queries are within ±10%** in this pair of runs (not called out here).
+*   **Most other queries are within ±10%** in this pair of runs.
+*   **Resource utilization**: memory tail/peak is lower (p95 ~-10.4%, max ~-10.1%), while CPU max spikes are higher (~+11.2%).
 
 ![50 Clients Summary (Elasticsearch 9.0)](plots/large_50_1002_combined_summary.png)
 

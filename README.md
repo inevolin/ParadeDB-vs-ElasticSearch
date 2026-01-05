@@ -24,9 +24,9 @@ For the large dataset, we tested performance across multiple concurrency levels 
 
 | Metrics (ParadeDB vs ES) | 1 Client | 10 Clients | 50 Clients |
 | :--- | :--- | :--- | :--- |
-| **Avg TPS (across Query 1–6)** | 150.96 vs **360.28** | 183.75 vs **794.87** | 444.32 vs **837.35** |
-| **Startup Time** | 16.51s vs **12.76s** | 15.37s vs **12.79s** | **14.15s** vs 18.03s |
-| **Load + Index Time** | **136.01s** vs 351.68s | **141.10s** vs 344.74s | **123.28s** vs 380.48s |
+| **Avg TPS (across Query 1–6)** | 151 vs **360** | 184 vs **795** | 444 vs **837** |
+| **Startup Time** | 17s vs **13s** | 15s vs **13s** | **14s** vs 18s |
+| **Load + Index Time** | **136s** vs 352s | **141s** vs 345s | **123s** vs 380s |
 
 #### Key Findings
 
@@ -58,9 +58,9 @@ For the large dataset, we tested performance across multiple concurrency levels 
 This run corresponds to `large_50_1002` and was generated with Elasticsearch 9.0. The baseline `large_50_1000` run uses Elasticsearch 8.x.
 
 **Observations (Elasticsearch 8 → 9)**
-*   **Change is workload-dependent**: Query 5 improves materially (~+20.7%).
+*   **Change is workload-dependent**: Query 5 improves materially (~+21%).
 *   **Most other queries are within ±10%** in this pair of runs.
-*   **Resource utilization**: memory tail/peak is lower (p95 ~-10.4%, max ~-10.1%), while CPU max spikes are higher (~+11.2%).
+*   **Resource utilization**: memory tail/peak is lower (p95 ~-10%, max ~-10%), while CPU max spikes are higher (~+11%).
 
 ![50 Clients Summary (Elasticsearch 9.0)](plots/large_50_1002_combined_summary.png)
 
@@ -71,8 +71,8 @@ This run corresponds to `large_50_1002` and was generated with Elasticsearch 9.0
 This run corresponds to `large_50_1001` and was generated with Elasticsearch hits tracking disabled (`track_total_hits: false`). The baseline `large_50_1000` run uses hits tracking enabled (the default behavior / `track_total_hits: true`).
 
 **Observations (hits tracking enabled → disabled)**
-*   **Largest wins are in higher-overhead searches**: Query 3 and Query 4 see the biggest gains (~+20.7% and ~+16.3%).
-*   **JOIN also improves, but modestly**: Query 6 improves (~+10.1%), suggesting hits tracking isn’t the dominant cost driver there.
+*   **Largest wins are in higher-overhead searches**: Query 3 and Query 4 see the biggest gains (~+21% and ~+16%).
+*   **JOIN also improves, but modestly**: Query 6 improves (~+10%), suggesting hits tracking isn’t the dominant cost driver there.
 
 ![50 Clients Summary (hits tracking disabled)](plots/large_50_1001_combined_summary.png)
 

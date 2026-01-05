@@ -88,7 +88,7 @@ The benchmarks were conducted using a containerized environment to ensure isolat
     *   Kubernetes Client: v1.34.1
     *   Python: 3.10.15
     *   Elasticsearch: 8.11.0 (and 9.0.0)
-    *   ParadeDB: latest
+    *   ParadeDB: 0.20.5
 *   **Resources**: Both systems were restricted to identical CPU and Memory limits (4 CPU, 8GB RAM, configurable in `config/benchmark_config.json`) to ensure a fair fight.
 *   **Data Storage Differences**: 
     *   **ParadeDB**: Stores full raw text data in PostgreSQL tables (title and content columns) plus creates BM25 search indexes, resulting in larger storage footprint.

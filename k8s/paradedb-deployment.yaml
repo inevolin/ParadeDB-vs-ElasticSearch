@@ -47,7 +47,7 @@ spec:
     spec:
       containers:
       - name: paradedb
-        image: paradedb/paradedb:latest
+        image: paradedb/paradedb:0.20.5
         args:
           - "-c"
           - "shared_buffers=3GB"

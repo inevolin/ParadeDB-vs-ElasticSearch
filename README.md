@@ -10,11 +10,13 @@ Based on the latest benchmark runs, we observed distinct performance profiles fo
 *   **JOIN Workload (Query 6)**: ParadeDB uses a SQL join against `child_documents`; Elasticsearch uses a `join` field with `has_child`. In the checked runs, ParadeDB was faster for JOINs at 1 and 50 clients, and Elasticsearch was faster at 10 clients.
 *   **Ingest & Indexing**: ParadeDB is materially faster end-to-end for loading + indexing in the included large runs.
 
+**Dataset sizing note**: This benchmark generates **one child document per parent document** at each scale (1:1). Concretely: `small` = 1,000 parents + 1,000 children; `medium` = 100,000 + 100,000; `large` = 1,000,000 + 1,000,000.
+
 ## 📈 Detailed Results
 
 For a query-by-query explanation of how Elasticsearch vs ParadeDB behaves (and where semantics differ), see [QUERY_BREAKDOWN.md](QUERY_BREAKDOWN.md).
 
-### 1. Large Dataset Performance (1,000,000 Parent Documents + Child Documents) & Concurrency Analysis
+### 1. Large Dataset Performance (1M Parent + 1M Child Documents) & Concurrency Analysis
 
 For the large dataset, we tested performance across multiple concurrency levels (1, 10, and 50 clients) to understand how each system scales under load.
 
@@ -248,6 +250,8 @@ The runner generates and/or consumes two datasets per scale:
 *   Child documents: `data/documents_child_{scale}.json`
 
 Child documents contain a `parent_id` that references a parent document `id`. Both ParadeDB and Elasticsearch load child documents when the file exists.
+
+**Child document counts (by scale)**: The generator produces the same number of child docs as parent docs (1:1), based on the `data.*_scale` values in `config/benchmark_config.json`.
 
 ### Results files
 
